@@ -35,7 +35,7 @@ with st.expander("🛠️ Kafka Cluster Management", expanded=True):
 
     st.subheader("Topics")
     try:
-        topics = admin_client.list_topics(request_timeout=10).topics
+        topics = admin_client.list_topics(timeout=10).topics
         st.write("Existing Topics:", list(topics.keys()))
     except KafkaException as e:
         st.error(f"Error fetching topics: {e}")
@@ -86,7 +86,7 @@ with st.expander("📊 Monitoring & Visualization", expanded=False):
     st.subheader("Message Throughput per Topic")
     try:
         topics = admin_client.list_topics(timeout=10).topics
-        topic_counts = {topic: len(admin_client.list_consumer_groups(timeout=10)) for topic in topics.keys()}
+        topic_counts = {topic: len(admin_client.list_consumer_groups().result(timeout=10).consumer_groups) for topic in topics.keys()}
         st.bar_chart(pd.DataFrame(topic_counts.values(), index=topic_counts.keys(), columns=["Messages"]))
     except KafkaException as e:
         st.error(f"Error fetching topic metadata: {e}")

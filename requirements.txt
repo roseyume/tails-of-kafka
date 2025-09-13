@@ -1,0 +1,5 @@
+confluent_kafka==2.11.1
+pandas==2.3.2
+streamlit==1.49.1
+authlibs==1.6.3
+orjson==3.11.3

@@ -3,12 +3,14 @@ tasks:
     command: |
       gp open README.md
       export PUBLIC_IP=127.0.0.1
-      docker-compose up
-      gp env KAFKAJS_NO_PARTITIONER_WARNING=1 
+      docker-compose up -d
+      pip install -r requirements.txt
+      python -m streamlit run workshop/kafka_dashboard.py
   
+env:
+  KAFKAJS_NO_PARTITIONER_WARNING: "1"
 
 ports:
-
   # Kafka Brokers, Zookeeper 
   - port: 2188
     onOpen: ignore
@@ -30,6 +32,9 @@ ports:
   # Kafka Schema Registry 
   - port: 8081
     onOpen: ignore
+
+  - port: 8501
+    onOpen: open-browser
 
 
 
