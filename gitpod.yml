@@ -1,0 +1,44 @@
+tasks:
+  - name: Setup Kafka Environment
+    command: |
+      gp open README.md
+      export PUBLIC_IP=127.0.0.1
+      docker-compose up
+      gp env KAFKAJS_NO_PARTITIONER_WARNING=1 
+  
+
+ports:
+
+  # AKHQ
+  - port: 28042
+    onOpen: open-preview
+    visibility: public
+
+
+  # Kafka Brokers, Zookeeper 
+  - port: 2188
+    onOpen: ignore
+  - port: 9092
+    onOpen: ignore
+  - port: 9093
+    onOpen: ignore
+  - port: 9094
+    onOpen: ignore
+  - port: 2181
+    onOpen: ignore
+  - port: 9992
+    onOpen: ignore
+  - port: 9993
+    onOpen: ignore
+  - port: 9994
+    onOpen: ignore
+
+  # Kafka Schema Registry 
+  - port: 8081
+    onOpen: ignore
+
+
+
+vscode:
+  extensions:
+    - ms-azuretools.vscode-docker    
