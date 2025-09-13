@@ -9,12 +9,6 @@ tasks:
 
 ports:
 
-  # AKHQ
-  - port: 28042
-    onOpen: open-preview
-    visibility: public
-
-
   # Kafka Brokers, Zookeeper 
   - port: 2188
     onOpen: ignore
