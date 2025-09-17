@@ -1,6 +1,7 @@
 # python -m streamlit run .\kafka_dashboard.py
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import json
 import time
@@ -19,37 +20,96 @@ KAFKA_BROKER = "localhost:9092"
 SCHEMA_REGISTRY_URL = "http://localhost:8081"
 
 # Initialize Kafka Admin Client and Schema Registry Client
-admin_client = AdminClient({"bootstrap.servers": KAFKA_BROKER})
+admin = AdminClient({"bootstrap.servers": KAFKA_BROKER})
 schema_registry_client = SchemaRegistryClient({"url": SCHEMA_REGISTRY_URL})
 
+if st.button("⟳ Refresh Kafka Info"):
+    st.rerun() 
+
+# Native Metric Box Defined
+def native_metric_box(metric_name, metric_value, button_key):
+    # Container simulates a card
+    with st.container():
+        # Top padding
+        st.write("")  
+
+        # Metric and plus button in one row
+        m_col, b_col = st.columns([5,1])
+        with m_col:
+            st.metric(metric_name, metric_value)
+        with b_col:
+            if st.button("+", key=button_key):
+                st.info(f"{metric_name} add button clicked")
+        
+        # Bottom padding
+        st.write("")
 
 # ---------------- Cluster Management ----------------
 with st.expander("🛠️ Kafka Cluster Management", expanded=True):
-    st.subheader("Brokers")
-    try:
-        cluster_metadata = admin_client.list_topics(timeout=10)
-        brokers = cluster_metadata.brokers
-        st.write("Active Brokers:", [f"{broker.id}: {broker.host}" for broker in brokers.values()])
-    except KafkaException as e:
-        st.error(f"Error fetching brokers: {e}")
+    # Extract details
+    cluster_name = "Cluster-1"  # you can label it however you like
+    # --- Fetch cluster metadata ---
+    cluster_metadata = admin.list_topics(timeout=10)
+    brokers = len(cluster_metadata.brokers)
+    topics = list(cluster_metadata.topics.keys())
+    partitions = sum(len(t.partitions) for t in cluster_metadata.topics.values())
 
-    st.subheader("Topics")
-    try:
-        topics = admin_client.list_topics(timeout=10).topics
-        st.write("Existing Topics:", list(topics.keys()))
-    except KafkaException as e:
-        st.error(f"Error fetching topics: {e}")
 
-    new_topic = st.text_input("Create Topic", key="new_topic_input")
-    num_partitions = st.number_input("Number of Partitions", min_value=1, value=1, step=1)
-    replication_factor = st.number_input("Replication Factor", min_value=1, value=1, step=1)
+    # Count partitions across all topics
+    num_partitions = sum(len(t.partitions) for t in cluster_metadata.topics.values())
 
-    if st.button("➕ Create Topic"):
-        try:
-            admin_client.create_topics([NewTopic(new_topic, num_partitions, replication_factor)])
-            st.success(f"Topic `{new_topic}` created!")
-        except KafkaException as e:
-            st.error(f"Error creating topic: {e}")
+    # --- Streamlit UI ---
+    st.subheader(cluster_name)
+
+    c1, c2, c3 = st.columns(3)
+
+    # --- Brokers metric + plus button ---
+    with c1:
+        label_col, button_col = st.columns([5,1])
+        with label_col:
+            st.metric("Brokers", brokers)
+        with button_col:
+            if st.button("➕", key="add_broker"):
+                # Kafka doesn’t support adding brokers via AdminClient
+                st.warning("Cannot add brokers programmatically. Add a broker manually to the cluster.")
+
+    # --- Partitions metric + plus button ---
+    with c2:
+        label_col, button_col = st.columns([5,1])
+        with label_col:
+            st.metric("Partitions", partitions)
+        with button_col:
+            if st.button("➕", key="add_partition"):
+                topic_to_expand = st.selectbox("Select topic", topics, key="partition_topic")
+                current_count = len(cluster_metadata.topics[topic_to_expand].partitions)
+                new_count = current_count + 1
+                # Create new partitions
+                fs = admin.create_partitions({topic_to_expand: NewPartitions(new_count)}, request_timeout=15)
+                for topic, f in fs.items():
+                    try:
+                        f.result()
+                        st.success(f"Added 1 partition to topic {topic}")
+                    except Exception as e:
+                        st.error(f"Failed to add partition to {topic}: {e}")
+
+    # --- Topics metric + plus button ---
+    with c3:
+        label_col, button_col = st.columns([5,1])
+        with label_col:
+            st.metric("Topics", len(topics))
+        with button_col:
+            if st.button("➕", key="add_topic"):
+                new_topic_name = st.text_input("New topic name", key="new_topic_input")
+                if new_topic_name:
+                    new_topic = NewTopic(new_topic_name, num_partitions=1, replication_factor=1)
+                    st.write(new_topic_name)
+                    fs = admin.create_topics([new_topic], request_timeout=15)
+                    for topic, f in fs.items():
+                        try:
+                            f.result()
+                            st.success(f"Created topic {topic}")
+                        except Exception as e:
+                            st.error(f"Failed to create topic {topic}: {e}")
 
 
 # ---------------- Schema Registry ----------------
@@ -85,18 +145,22 @@ with st.expander("📑 Schema Registry", expanded=False):
 with st.expander("📊 Monitoring & Visualization", expanded=False):
     st.subheader("Message Throughput per Topic")
     try:
-        topics = admin_client.list_topics(timeout=10).topics
-        topic_counts = {topic: len(admin_client.list_consumer_groups().result(timeout=10).consumer_groups) for topic in topics.keys()}
+        topics = admin.list_topics(timeout=10).topics
+        groups_result = admin.list_consumer_groups(request_timeout=10)
+        consumer_groups = groups_result.result()  # This is a dict: {group_id: ConsumerGroupListing}
+        st.write("REsults")
+        st.write(consumer_groups.valid)
+        topic_counts = {topic: len(consumer_groups.valid) for topic in topics.keys()}
         st.bar_chart(pd.DataFrame(topic_counts.values(), index=topic_counts.keys(), columns=["Messages"]))
     except KafkaException as e:
         st.error(f"Error fetching topic metadata: {e}")
 
     st.subheader("Simulated Consumer Lag")
     try:
-        consumer_groups = admin_client.list_consumer_groups(timeout=10)
+        consumer_groups = admin.list_consumer_groups(request_timeout=10).result().valid
         lag_data = []
         for group in consumer_groups:
-            group_metadata = admin_client.list_consumer_group_offsets(group.group_id)
+            group_metadata = admin.list_consumer_group_offsets(group.group_id)
             for topic, partition in group_metadata.items():
                 lag = partition.high - partition.low
                 lag_data.append({"consumer": group.group_id, "topic": topic, "lag": lag})

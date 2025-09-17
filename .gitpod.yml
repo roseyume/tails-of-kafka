@@ -5,7 +5,10 @@ tasks:
       export PUBLIC_IP=127.0.0.1
       docker-compose up -d
       pip install -r requirements.txt
-      python -m streamlit run workshop/kafka_dashboard.py
+      uvicorn backend.main:app --reload
+      npm install axios react-bootstrap bootstrap
+      cd frontend
+      npm start
   
 env:
   KAFKAJS_NO_PARTITIONER_WARNING: "1"
@@ -33,8 +36,11 @@ ports:
   - port: 8081
     onOpen: ignore
 
-  - port: 8501
+  - port: 8000
     onOpen: open-browser
+  - port: 3000
+    onOpen: open-browser
+
 
 
 
