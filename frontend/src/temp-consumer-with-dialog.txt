@@ -1,0 +1,90 @@
+      
+      {/* Consumer Configuration Edit Dialog */}
+      <Dialog open={isEditingConfig} onOpenChange={setIsEditingConfig}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Consumer Configuration</DialogTitle>
+            <DialogDescription>
+              Update the configuration for "{editingConsumer?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          {editingConsumer && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-consumer-name">Consumer Name</Label>
+                <Input
+                  id="edit-consumer-name"
+                  value={editingConsumer.name}
+                  onChange={(e) => setEditingConsumer(prev => prev ? { ...prev, name: e.target.value } : null)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-group-id">Consumer Group ID</Label>
+                <Input
+                  id="edit-group-id"
+                  value={editingConsumer.groupId}
+                  onChange={(e) => setEditingConsumer(prev => prev ? { ...prev, groupId: e.target.value } : null)}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-auto-offset-reset">Auto Offset Reset</Label>
+                  <Select
+                    value={editingConsumer.autoOffsetReset}
+                    onValueChange={(value: any) => setEditingConsumer(prev => prev ? { ...prev, autoOffsetReset: value } : null)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="earliest">earliest</SelectItem>
+                      <SelectItem value="latest">latest</SelectItem>
+                      <SelectItem value="none">none</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-auto-commit-interval">Auto Commit Interval (ms)</Label>
+                  <Input
+                    id="edit-auto-commit-interval"
+                    type="number"
+                    value={editingConsumer.autoCommitInterval}
+                    onChange={(e) => setEditingConsumer(prev => prev ? { 
+                      ...prev, 
+                      autoCommitInterval: parseInt(e.target.value) 
+                    } : null)}
+                    disabled={!editingConsumer.enableAutoCommit}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="edit-enable-auto-commit"
+                  checked={editingConsumer.enableAutoCommit}
+                  onChange={(e) => setEditingConsumer(prev => prev ? { 
+                    ...prev, 
+                    enableAutoCommit: e.target.checked 
+                  } : null)}
+                  className="rounded"
+                />
+                <Label htmlFor="edit-enable-auto-commit">Enable Auto Commit</Label>
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsEditingConfig(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={updateConsumerConfig}>Update Configuration</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

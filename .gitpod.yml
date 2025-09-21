@@ -6,7 +6,7 @@ tasks:
       docker-compose up -d
       pip install -r requirements.txt
       uvicorn backend.main:app --reload
-      npm install axios react-bootstrap bootstrap
+      npm install axios react-bootstrap bootstrap vite
       cd frontend
       npm start
   
