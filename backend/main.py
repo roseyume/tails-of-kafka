@@ -5,6 +5,16 @@ from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic
 from confluent_kafka import Consumer, Producer, TopicPartition
 from typing import List, Optional, Dict
 from fastapi import HTTPException
+import logging
+
+logger = logging.getLogger("myapp")
+logging.basicConfig(level=logging.ERROR)
+# Add a console handler (stdout)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 app = FastAPI()
 
@@ -36,6 +46,16 @@ producers = {}
 # -------------------------------
 # Request models
 # -------------------------------
+class ClusterNode(BaseModel):
+    broker_id: int
+    hostname: str
+    port: int
+    role: str  # 'controller' | 'follower'
+    status: str  # 'running' | 'stopped' | 'error'
+    rack: str | None = None
+    num_partitions_as_leader: int = 0
+    num_partitions_as_follower: int = 0
+
 class TopicRequest(BaseModel):
     name: str
     partitions: int = 1
@@ -68,9 +88,66 @@ class ProducerConfigRequest(BaseModel):
     linger_ms: int = 0
     compression_type: str = "none"
 
+logger.info("This will always appear if flush is enabled by default")
+
 # -------------------------------
 # Admin endpoints
 # -------------------------------
+@app.get("/cluster", response_model=List[ClusterNode])
+async def get_cluster_info():
+    logger.info("Fetching Kafka cluster metadata...")
+    try:
+        client = AdminClient(KAFKA_CONFIG)
+        metadata = client.list_topics(timeout=5)
+        logger.info("Stuff")
+        logger.error("Something went wrong")
+        logger.info(metadata)
+
+        nodes = []
+        controller_id = metadata.controller_id
+
+        # Initialize broker stats
+        broker_stats = {broker_id: {"leader_count": 0, "follower_count": 0} 
+                        for broker_id in metadata.brokers.keys()}
+
+        # Count leader/follower partitions per broker
+        for topic in metadata.topics.values():
+            for partition in topic.partitions.values():
+                leader_id = partition.leader
+                replicas = partition.replicas
+                for broker_id in replicas:
+                    if broker_id == leader_id:
+                        broker_stats[broker_id]["leader_count"] += 1
+                    else:
+                        broker_stats[broker_id]["follower_count"] += 1
+
+        # Build cluster node info
+        for broker_id, broker in metadata.brokers.items():
+            node = ClusterNode(
+                broker_id=broker_id,
+                hostname=broker.host,
+                port=broker.port,
+                rack=broker.rack,
+                status='running',  # if metadata returned, assume running
+                role='controller' if broker_id == controller_id else 'follower',
+                num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
+                num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
+            )
+            nodes.append(node)
+
+        return nodes
+
+    except Exception as e:
+        # Return a generic error node if unable to connect
+        return [ClusterNode(
+            broker_id=-1,
+            hostname="unknown",
+            port=0,
+            role="unknown",
+            status="error",
+            rack=None
+        )]
+
 @app.get("/topics")
 def list_topics():
     metadata = admin.list_topics(timeout=10)
@@ -96,11 +173,6 @@ def add_partitions(req: PartitionsRequest):
             return {"success": True, "topic": topic, "added_partitions": req.additional_partitions}
         except Exception as e:
             return {"success": False, "error": str(e)}
-
-@app.get("/brokers")
-def list_brokers():
-    metadata = admin.list_topics(timeout=10)
-    return {"broker_count": len(metadata.brokers)}
 
 @app.get("/partitions")
 def list_partitions():

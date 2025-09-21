@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -66,6 +67,8 @@ interface PartitionReassignment {
 }
 
 export function ConsumersManagement() {
+  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
   const [consumers, setConsumers] = useState<Consumer[]>([
     {
       id: 'cons-1',

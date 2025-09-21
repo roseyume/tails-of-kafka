@@ -5,13 +5,16 @@ tasks:
       export PUBLIC_IP=127.0.0.1
       docker-compose up -d
       pip install -r requirements.txt
-      uvicorn backend.main:app --reload
+      uvicorn backend.main:app --reload --port 8000 --host 0.0.0.0
       npm install axios react-bootstrap bootstrap vite
       cd frontend
       npm start
+      gp ports visibility 8000:public
+      gp ports visibility 3000:public
   
 env:
   KAFKAJS_NO_PARTITIONER_WARNING: "1"
+  REACT_APP_BACKEND_URL: https://8000-<workspace-id>.ws-us121.gitpod.io #TODO: Validate this and Update apiUrl variable
 
 ports:
   # Kafka Brokers, Zookeeper 
@@ -37,9 +40,11 @@ ports:
     onOpen: ignore
 
   - port: 8000
-    onOpen: open-browser
+    visibility: public
+    onOpen: ignore
   - port: 3000
-    onOpen: open-browser
+    visibility: public
+    # onOpen: open-preview
 
 
 

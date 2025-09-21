@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -31,6 +32,8 @@ interface CompatibilityConfig {
 }
 
 export function SchemaRegistry() {
+  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
   const [schemas, setSchemas] = useState<Schema[]>([
     {
       id: 1,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -33,6 +34,8 @@ interface Partition {
 }
 
 export function TopicsManagement() {
+  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
   const [topics, setTopics] = useState<Topic[]>([
     {
       name: 'user-events',

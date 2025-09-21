@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -36,6 +37,8 @@ interface Message {
 }
 
 export function ProducersManagement() {
+  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
   const [producers, setProducers] = useState<Producer[]>([
     {
       id: 'prod-1',

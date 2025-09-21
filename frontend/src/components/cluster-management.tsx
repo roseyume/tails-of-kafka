@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -11,14 +12,19 @@ import { Server, Play, Square, Trash2, Plus, Settings } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 interface Broker {
-  id: number;
-  host: string;
+  broker_id: number;
+  hostname: string;
   port: number;
-  status: 'running' | 'stopped' | 'error';
   role: 'controller' | 'follower';
+  status: 'running' | 'stopped' | 'error';
+  rack?: string; // optional, equivalent to `str | None` in Python
+  num_partitions_as_leader: number;
+  num_partitions_as_follower: number;
 }
 
 export function ClusterManagement() {
+const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
   const [brokers, setBrokers] = useState<Broker[]>([
     { id: 1, host: 'localhost', port: 9092, status: 'running', role: 'controller' },
     { id: 2, host: 'localhost', port: 9093, status: 'running', role: 'follower' },
@@ -80,6 +86,21 @@ export function ClusterManagement() {
   };
 
   const runningBrokers = brokers.filter(b => b.status === 'running').length;
+
+  const fetchMetrics = async () => {
+    try {
+      const [brokerResponse] = await Promise.all([
+        axios.get(`${apiURL}/brokers`)
+      ]);
+      setBrokers(brokerResponse)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchMetrics();
+  }, []);
 
   return (
     <div className="space-y-6">

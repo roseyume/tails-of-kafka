@@ -1,10 +1,13 @@
 import React from 'react';
+import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Server, Database, Send, MessageSquare, Activity, Users } from 'lucide-react';
 
 export function Dashboard() {
+  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
   const stats = [
     {
       title: 'Cluster Status',
