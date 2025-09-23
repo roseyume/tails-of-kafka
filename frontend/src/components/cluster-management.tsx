@@ -17,7 +17,6 @@ interface Broker {
   port: number;
   role: 'controller' | 'follower';
   status: 'running' | 'stopped' | 'error';
-  rack?: string; // optional, equivalent to `str | None` in Python
   num_partitions_as_leader: number;
   num_partitions_as_follower: number;
 }
@@ -31,45 +30,41 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
     { id: 3, host: 'localhost', port: 9094, status: 'stopped', role: 'follower' },
   ]);
 
-  const [newBroker, setNewBroker] = useState({
-    host: 'localhost',
-    port: 9095,
-  });
-
   const [isAddingBroker, setIsAddingBroker] = useState(false);
 
-  const startBroker = (id: number) => {
-    setBrokers(prev => prev.map(broker => 
-      broker.id === id ? { ...broker, status: 'running' as const } : broker
-    ));
+  const startBroker = async (id: number) => {
+    const [brokerResponse] = await Promise.all([
+      axios.post(`${apiURL}/brokers/restart/${id}`)
+    ]);
+    setBrokers(brokerResponse.data.broker);
+
     toast.success(`Broker ${id} started successfully`);
   };
 
-  const stopBroker = (id: number) => {
-    setBrokers(prev => prev.map(broker => 
-      broker.id === id ? { ...broker, status: 'stopped' as const } : broker
-    ));
+  const stopBroker = async (id: number) => {
+    const [brokerResponse] = await Promise.all([
+      axios.post(`${apiURL}/brokers/stop/${id}`)
+    ]);
+    setBrokers(brokerResponse.data.broker);
+  
     toast.success(`Broker ${id} stopped successfully`);
   };
 
-  const removeBroker = (id: number) => {
-    setBrokers(prev => prev.filter(broker => broker.id !== id));
+  const removeBroker = async (id: number) => {
+    const [brokerResponse] = await Promise.all([
+      axios.post(`${apiURL}/brokers/remove/${id}`)
+    ]);
+    setBrokers(brokerResponse.data.broker);
+
     toast.success(`Broker ${id} removed from cluster`);
   };
 
-  const addBroker = () => {
-    const id = Math.max(...brokers.map(b => b.id)) + 1;
-    const broker: Broker = {
-      id,
-      host: newBroker.host,
-      port: newBroker.port,
-      status: 'stopped',
-      role: 'follower',
-    };
-    setBrokers(prev => [...prev, broker]);
-    setNewBroker({ host: 'localhost', port: newBroker.port + 1 });
-    setIsAddingBroker(false);
-    toast.success(`Broker ${id} added to cluster`);
+  const addBroker = async () => {
+    const [brokerResponse] = await Promise.all([
+      axios.get(`${apiURL}/brokers/create`)
+    ]);
+    setBrokers(brokerResponse.data.broker);
+    toast.success(`Broker added to cluster`);
   };
 
   const getStatusColor = (status: string) => {
@@ -87,19 +82,21 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
 
   const runningBrokers = brokers.filter(b => b.status === 'running').length;
 
-  const fetchMetrics = async () => {
+  
+  const getBrokers = async () => {
     try {
       const [brokerResponse] = await Promise.all([
         axios.get(`${apiURL}/brokers`)
       ]);
-      setBrokers(brokerResponse)
+      setBrokers(brokerResponse.data)
     } catch (err) {
       console.error(err);
     }
   };
 
   useEffect(() => {
-    fetchMetrics();
+    console.log("useEffect")
+    getBrokers();
   }, []);
 
   return (
@@ -112,49 +109,10 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
               <CardTitle>Cluster Overview</CardTitle>
               <CardDescription>Manage your Kafka cluster brokers</CardDescription>
             </div>
-            <Dialog open={isAddingBroker} onOpenChange={setIsAddingBroker}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Broker
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add New Broker</DialogTitle>
-                  <DialogDescription>
-                    Configure a new broker to add to the cluster
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="host">Host</Label>
-                    <Input
-                      id="host"
-                      value={newBroker.host}
-                      onChange={(e) => setNewBroker(prev => ({ ...prev, host: e.target.value }))}
-                      placeholder="localhost"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="port">Port</Label>
-                    <Input
-                      id="port"
-                      type="number"
-                      value={newBroker.port}
-                      onChange={(e) => setNewBroker(prev => ({ ...prev, port: parseInt(e.target.value) }))}
-                      placeholder="9095"
-                    />
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <Button variant="outline" onClick={() => setIsAddingBroker(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={addBroker}>Add Broker</Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button onClick={addBroker}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Broker
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -165,12 +123,12 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Running Brokers</p>
-              <p className="text-2xl font-bold text-green-600">{runningBrokers}</p>
+              <p className="text-2xl font-bold text-green-600">{brokers.filter(b => b.status === 'running').length}</p>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Cluster Health</p>
-              <Badge className={runningBrokers > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                {runningBrokers > 0 ? 'Healthy' : 'Down'}
+              <Badge className={brokers.filter(b => b.status === 'running').length > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                {brokers.filter(b => b.status === 'running').length > 0 ? 'Healthy' : 'Down'}
               </Badge>
             </div>
           </div>
@@ -186,15 +144,15 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
         <CardContent>
           <div className="space-y-4">
             {brokers.map((broker) => (
-              <div key={broker.id} className="flex items-center justify-between p-4 border rounded-lg">
+              <div key={broker.broker_id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center justify-center w-10 h-10 bg-muted rounded-lg">
                     <Server className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="font-medium">Broker {broker.id}</h4>
+                    <h4 className="font-medium">Broker {broker.broker_id}</h4>
                     <p className="text-sm text-muted-foreground">
-                      {broker.host}:{broker.port}
+                      {broker.hostname}:{broker.port}
                     </p>
                   </div>
                 </div>
@@ -212,7 +170,7 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => stopBroker(broker.id)}
+                        onClick={() => stopBroker(broker.broker_id)}
                       >
                         <Square className="w-4 h-4 mr-1" />
                         Stop
@@ -221,7 +179,7 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => startBroker(broker.id)}
+                        onClick={() => startBroker(broker.broker_id)}
                       >
                         <Play className="w-4 h-4 mr-1" />
                         Start
@@ -238,12 +196,12 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
                         <AlertDialogHeader>
                           <AlertDialogTitle>Remove Broker</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to remove Broker {broker.id}? This action cannot be undone.
+                            Are you sure you want to remove Broker {broker.broker_id}? This action cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => removeBroker(broker.id)}>
+                          <AlertDialogAction onClick={() => removeBroker(broker.broker_id)}>
                             Remove
                           </AlertDialogAction>
                         </AlertDialogFooter>

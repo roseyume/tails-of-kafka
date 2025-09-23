@@ -6,15 +6,22 @@ from confluent_kafka import Consumer, Producer, TopicPartition
 from typing import List, Optional, Dict
 from fastapi import HTTPException
 import logging
+import yaml
+import subprocess
+import os
+import sys
+import time
 
-logger = logging.getLogger("myapp")
-logging.basicConfig(level=logging.ERROR)
-# Add a console handler (stdout)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+# ----------------------------
+# Configure root logger
+# ----------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,   # ensure logs go to stdout (Gitpod picks this up)
+)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -46,13 +53,12 @@ producers = {}
 # -------------------------------
 # Request models
 # -------------------------------
-class ClusterNode(BaseModel):
+class Broker(BaseModel):
     broker_id: int
     hostname: str
     port: int
     role: str  # 'controller' | 'follower'
     status: str  # 'running' | 'stopped' | 'error'
-    rack: str | None = None
     num_partitions_as_leader: int = 0
     num_partitions_as_follower: int = 0
 
@@ -93,15 +99,11 @@ logger.info("This will always appear if flush is enabled by default")
 # -------------------------------
 # Admin endpoints
 # -------------------------------
-@app.get("/cluster", response_model=List[ClusterNode])
-async def get_cluster_info():
+@app.get("/brokers", response_model=List[Broker])
+async def get_brokers():
     logger.info("Fetching Kafka cluster metadata...")
     try:
-        client = AdminClient(KAFKA_CONFIG)
-        metadata = client.list_topics(timeout=5)
-        logger.info("Stuff")
-        logger.error("Something went wrong")
-        logger.info(metadata)
+        metadata = admin.list_topics(timeout=5)
 
         nodes = []
         controller_id = metadata.controller_id
@@ -121,13 +123,12 @@ async def get_cluster_info():
                     else:
                         broker_stats[broker_id]["follower_count"] += 1
 
-        # Build cluster node info
+        # Build broker node info
         for broker_id, broker in metadata.brokers.items():
-            node = ClusterNode(
+            node = Broker(
                 broker_id=broker_id,
                 hostname=broker.host,
                 port=broker.port,
-                rack=broker.rack,
                 status='running',  # if metadata returned, assume running
                 role='controller' if broker_id == controller_id else 'follower',
                 num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
@@ -139,14 +140,157 @@ async def get_cluster_info():
 
     except Exception as e:
         # Return a generic error node if unable to connect
-        return [ClusterNode(
+        return [Broker(
             broker_id=-1,
             hostname="unknown",
             port=0,
             role="unknown",
-            status="error",
-            rack=None
+            status="error"
         )]
+
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+DOCKER_COMPOSE_FILE = os.path.join(script_dir, "..", "docker-compose.yml")
+
+def find_service_name(broker_id: int) -> str:
+    """Find the docker-compose service name for a given broker_id."""
+    if not os.path.exists(DOCKER_COMPOSE_FILE):
+        raise HTTPException(status_code=500, detail="docker-compose.yml not found")
+
+    with open(DOCKER_COMPOSE_FILE, "r") as f:
+        compose_data = yaml.safe_load(f)
+
+    for name, service in compose_data.get("services", {}).items():
+        env = service.get("environment", {})
+        if int(env.get("KAFKA_BROKER_ID", -1)) == broker_id:
+            return name
+    return None
+
+
+@app.get("/brokers/create")
+async def add_broker():
+    try:
+        if not os.path.exists(DOCKER_COMPOSE_FILE):
+            raise HTTPException(status_code=500, detail="docker-compose.yml not found")
+        with open(DOCKER_COMPOSE_FILE, "r") as f:
+            compose_data = yaml.safe_load(f)
+
+        existing_ids = set()
+        for service_name, service in compose_data.get("services", {}).items():
+            if service_name.startswith("kafka-"):
+                env = service.get("environment", {})
+                bid = env.get("KAFKA_BROKER_ID")
+                if bid is not None:
+                    existing_ids.add(int(bid))
+
+        broker_id=max(existing_ids, default=0) + 1
+        service_name = f"kafka-{broker_id}"
+
+        # Create new broker definition
+        new_service = {
+            "image": "confluentinc/cp-kafka:6.0.1",
+            "container_name": service_name,
+            "hostname": service_name,
+            "depends_on": ["zookeeper-1"],
+            "ports": [
+                f"{9092+broker_id}:{9093+broker_id}",
+                f"{29092+broker_id}:{29093+broker_id}",
+                f"{9992+broker_id}:{9993+broker_id}"
+            ],
+            "environment": {
+                "KAFKA_BROKER_ID": f"{broker_id}",
+                "KAFKA_BROKER_RACK": f"{"r" + str(broker_id)}",
+                "KAFKA_ZOOKEEPER_CONNECT": "zookeeper-1:2181",
+                "KAFKA_LISTENERS": f"LISTENER_INTERNAL://{service_name}:{19093+broker_id},LISTENER_DOCKERHOST://{service_name}:{29093+broker_id},LISTENER_EXTERNAL://{service_name}:{9093+broker_id}",
+                "KAFKA_ADVERTISED_LISTENERS": f"LISTENER_INTERNAL://{service_name}:{19093+broker_id},LISTENER_DOCKERHOST://localhost:{29093+broker_id},LISTENER_EXTERNAL://${{PUBLIC_IP:-127.0.0.1}}:{9093+broker_id}",
+                "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "LISTENER_INTERNAL:PLAINTEXT,LISTENER_DOCKERHOST:PLAINTEXT,LISTENER_EXTERNAL:PLAINTEXT",
+                "KAFKA_INTER_BROKER_LISTENER_NAME": "LISTENER_INTERNAL",
+                "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": 3,
+                "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": 1,
+                "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": 3,
+                "KAFKA_MESSAGE_TIMESTAMP_TYPE": "CreateTime",
+                "KAFKA_MIN_INSYNC_REPLICAS": 1,
+                "KAFKA_DELETE_TOPIC_ENABLE": "True",
+                "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "False",
+                "KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS": 100,
+                "KAFKA_JMX_PORT": f"{broker_id+9993}",
+                "KAFKA_JMX_OPTS": "-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.rmi.port={}".format(broker_id+9993),
+                "KAFKA_JMX_HOSTNAME": "${PUBLIC_IP:-127.0.0.1}"
+            },
+            "volumes": ["./data-transfer:/data-transfer"],
+            "restart": "unless-stopped",
+        }
+
+        compose_data["services"][service_name] = new_service
+
+        with open(DOCKER_COMPOSE_FILE, "w") as f:
+            yaml.dump(compose_data, f, default_flow_style=False)
+
+        try:
+            subprocess.run(["docker-compose", "up", "-d", service_name], check=True)
+        except subprocess.CalledProcessError as e:
+            raise HTTPException(status_code=500, detail=f"Failed to start broker: {e}")
+
+        time.sleep(1)
+        return {"status": "success", "broker": await get_brokers()}
+    except Exception as e:
+        print(e)
+
+
+def run_compose_command(service_name: str, command: str):
+    """Run docker-compose command on the given service."""
+    try:
+        subprocess.run(
+            ["docker-compose", "-f", DOCKER_COMPOSE_FILE, command, service_name],
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to {command} {service_name}: {e}")
+
+
+@app.post("/brokers/stop/{broker_id}")
+async def stop_broker(broker_id: int):
+    service_name = find_service_name(broker_id)
+    if not service_name:
+        raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
+    run_compose_command(service_name, "stop")
+    time.sleep(1)
+    return {"status": "stopped", "service_name": service_name, "broker": await get_brokers()}
+
+
+@app.post("/brokers/restart/{broker_id}")
+async def restart_broker(broker_id: int):
+    service_name = find_service_name(broker_id)
+    if not service_name:
+        raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
+    run_compose_command(service_name, "restart")
+    time.sleep(1)
+    return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
+
+
+@app.delete("/brokers/delete/{broker_id}")
+async def delete_broker(broker_id: int):
+    service_name = find_service_name(broker_id)
+    if not service_name:
+        raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
+
+    # Stop the container first
+    run_compose_command(service_name, "stop")
+
+    # Remove the container
+    run_compose_command(service_name, "rm -f")
+
+    # Optionally: remove the service from docker-compose.yml
+    with open(DOCKER_COMPOSE_FILE, "r") as f:
+        compose_data = yaml.safe_load(f)
+
+    compose_data["services"].pop(service_name, None)
+
+    with open(DOCKER_COMPOSE_FILE, "w") as f:
+        yaml.dump(compose_data, f, default_flow_style=False)
+
+    time.sleep(1)
+    return {"status": "deleted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
 
 @app.get("/topics")
 def list_topics():
