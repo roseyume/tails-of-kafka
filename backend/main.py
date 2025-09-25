@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic
-from confluent_kafka import Consumer, Producer, TopicPartition
+from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic, ConfigResource
+from confluent_kafka import Consumer, Producer, TopicPartition, KafkaException, KafkaError
 from typing import List, Optional, Dict
 from fastapi import HTTPException
 import logging
@@ -62,10 +62,22 @@ class Broker(BaseModel):
     num_partitions_as_leader: int = 0
     num_partitions_as_follower: int = 0
 
+class Topic(BaseModel):
+    name: str
+    partitions: int
+    replicationFactor: int
+    retentionHours: int
+    messageCount: int
+    size: str
+    producers: int
+    consumers: int
+    status: str
+
 class TopicRequest(BaseModel):
     name: str
     partitions: int = 1
     replication_factor: int = 1
+    retentionHours: int = 168
 
 class PartitionsRequest(BaseModel):
     name: str
@@ -104,13 +116,21 @@ async def get_brokers():
     logger.info("Fetching Kafka cluster metadata...")
     try:
         metadata = admin.list_topics(timeout=5)
-
         nodes = []
         controller_id = metadata.controller_id
 
-        # Initialize broker stats
-        broker_stats = {broker_id: {"leader_count": 0, "follower_count": 0} 
-                        for broker_id in metadata.brokers.keys()}
+        # Collect broker IDs from replicas (alive + dead)
+        replica_brokers = set()
+        for topic in metadata.topics.values():
+            for partition in topic.partitions.values():
+                replica_brokers.update(partition.replicas)
+
+        # Live brokers (from metadata)
+        live_brokers = set(metadata.brokers.keys())
+
+        # Initialize broker stats for all brokers (live + dead)
+        broker_stats = {broker_id: {"leader_count": 0, "follower_count": 0}
+                        for broker_id in replica_brokers}
 
         # Count leader/follower partitions per broker
         for topic in metadata.topics.values():
@@ -123,23 +143,36 @@ async def get_brokers():
                     else:
                         broker_stats[broker_id]["follower_count"] += 1
 
-        # Build broker node info
-        for broker_id, broker in metadata.brokers.items():
-            node = Broker(
-                broker_id=broker_id,
-                hostname=broker.host,
-                port=broker.port,
-                status='running',  # if metadata returned, assume running
-                role='controller' if broker_id == controller_id else 'follower',
-                num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
-                num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
-            )
+        # Build broker node info (live + dead)
+        for broker_id in replica_brokers:
+            if broker_id in live_brokers:
+                broker = metadata.brokers[broker_id]
+                node = Broker(
+                    broker_id=broker_id,
+                    hostname=broker.host,
+                    port=broker.port,
+                    status="running",
+                    role="controller" if broker_id == controller_id else "follower",
+                    num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
+                    num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
+                )
+            else:
+                # Dead broker (no metadata.host/port available)
+                node = Broker(
+                    broker_id=broker_id,
+                    hostname="unknown",
+                    port=0,
+                    status="down",
+                    role="unknown",
+                    num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
+                    num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
+                )
             nodes.append(node)
 
         return nodes
 
     except Exception as e:
-        # Return a generic error node if unable to connect
+        logger.error("Failed to fetch metadata: %s", e)
         return [Broker(
             broker_id=-1,
             hostname="unknown",
@@ -147,6 +180,7 @@ async def get_brokers():
             role="unknown",
             status="error"
         )]
+
 
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -292,22 +326,98 @@ async def delete_broker(broker_id: int):
     time.sleep(1)
     return {"status": "deleted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
 
-@app.get("/topics")
+def get_topic_config(topic_name: str):
+    """Fetch topic config like retention.ms"""
+    resource = ConfigResource("topic", topic_name)
+    try:
+        configs = admin.describe_configs([resource])
+        cfg = configs[resource].result()
+        retention_entry = cfg.get("retention.ms")
+        if retention_entry is not None and retention_entry.value is not None:
+            retention_ms = int(retention_entry.value)
+        else:
+            retention_ms = 7 * 24 * 60 * 60 * 1000  # default 7 days
+        return retention_ms
+    except KafkaException as e:
+        logger.error("Failed to get config for %s: %s", topic_name, e)
+        return 7 * 24 * 60 * 60 * 1000  # default 7 days
+
+def format_bytes(size_in_bytes: int) -> str:
+    """Convert bytes to a human-readable string (KB, MB, GB, etc.)"""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
+        if size_in_bytes < 1024:
+            return f"{size_in_bytes:.2f} {unit}"
+        size_in_bytes /= 1024
+    return f"{size_in_bytes:.2f} PB"
+
+def get_topic_metrics(topic_name: str):
+    """
+    Stub function: implement your logic to count messages, size, producers, consumers.
+    This usually requires tracking offsets or using Kafka monitoring APIs.
+    """
+    # Example static values for demonstration
+    return {
+        "messageCount": 15420,
+        "size": format_bytes(2.3 * 1024 * 1024),
+        "producers": 2,
+        "consumers": 3,
+        "status": "active"
+    }
+
+@app.get("/topics", response_model=list[Topic])
 def list_topics():
-    metadata = admin.list_topics(timeout=10)
-    return list(metadata.topics.keys())
+    try:
+        metadata = admin.list_topics(timeout=10)
+        topics = []
+
+        for topic_name, topic in metadata.topics.items():
+            partitions = len(topic.partitions)
+            replication_factor = len(next(iter(topic.partitions.values())).replicas)
+
+            retention_ms = get_topic_config(topic_name)
+            retention_hours = retention_ms // (1000 * 60 * 60)
+
+            metrics = get_topic_metrics(topic_name)
+
+            topics.append(Topic(
+                name=topic_name,
+                partitions=partitions,
+                replicationFactor=replication_factor,
+                retentionHours=retention_hours,
+                messageCount=metrics["messageCount"],
+                size=metrics["size"],
+                producers=metrics["producers"],
+                consumers=metrics["consumers"],
+                status=metrics["status"]
+            ))
+
+        return topics
+
+    except KafkaException as e:
+        logger.error("Failed to list topics: %s", e)
+        return []
+
 
 @app.post("/topics")
 def create_topic(req: TopicRequest):
-    new_topic = NewTopic(req.name, num_partitions=req.partitions, replication_factor=req.replication_factor)
-    fs = admin.create_topics([new_topic], request_timeout=15)
-    for topic, f in fs.items():
-        try:
-            f.result()
-            return {"success": True, "topic": topic}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+    retention_ms = retention_hours * 60 * 60 * 1000  # convert hours → milliseconds
 
+    new_topic = NewTopic(
+        topic=name,
+        num_partitions=num_partitions,
+        replication_factor=replication_factor,
+        config={"retention.ms": str(retention_ms)}
+    )
+
+    fs = admin.create_topics([new_topic])
+
+    for topic_name, f in fs.items():
+        try:
+            f.result()  # wait for creation
+            logger.info("Topic %s created successfully", topic_name)
+        except Exception as e:
+            logger.error("Failed to create topic %s: %s", topic_name, e)
+            
 @app.post("/partitions")
 def add_partitions(req: PartitionsRequest):
     fs = admin.create_partitions({req.name: NewPartitions(total_count=req.additional_partitions)}, request_timeout=15)

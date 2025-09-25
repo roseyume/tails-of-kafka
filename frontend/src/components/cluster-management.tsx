@@ -50,9 +50,10 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
     toast.success(`Broker ${id} stopped successfully`);
   };
 
+  //TODO: Need to resolve scenario: removed broker is still assigned as replicas. Force partition reassignment?
   const removeBroker = async (id: number) => {
     const [brokerResponse] = await Promise.all([
-      axios.post(`${apiURL}/brokers/remove/${id}`)
+      axios.delete(`${apiURL}/brokers/delete/${id}`)
     ]);
     setBrokers(brokerResponse.data.broker);
 
@@ -95,7 +96,6 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
   };
 
   useEffect(() => {
-    console.log("useEffect")
     getBrokers();
   }, []);
 

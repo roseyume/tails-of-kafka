@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -82,7 +82,7 @@ export function TopicsManagement() {
   const [isCreatingTopic, setIsCreatingTopic] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
 
-  const createTopic = () => {
+  const createTopic = async () => {
     if (!newTopic.name.trim()) {
       toast.error('Topic name is required');
       return;
@@ -93,19 +93,27 @@ export function TopicsManagement() {
       return;
     }
 
-    const topic: Topic = {
-      ...newTopic,
-      messageCount: 0,
-      size: '0 B',
-      producers: 0,
-      consumers: 0,
-      status: 'idle',
-    };
+    try {
+      const [brokerResponse] = await Promise.all([
+        axios.get(`${apiURL}/topics`, newTopic)
+      ]);
 
-    setTopics(prev => [...prev, topic]);
-    setNewTopic({ name: '', partitions: 3, replicationFactor: 2, retentionHours: 168 });
-    setIsCreatingTopic(false);
-    toast.success(`Topic "${topic.name}" created successfully`);
+      const topic: Topic = {
+        ...newTopic,
+        messageCount: 0,
+        size: '0 B',
+        producers: 0,
+        consumers: 0,
+        status: 'idle',
+      };
+
+      setTopics(prev => [...prev, topic]);
+      setNewTopic({ name: '', partitions: 3, replicationFactor: 2, retentionHours: 168 });
+      setIsCreatingTopic(false);
+      toast.success(`Topic "${topic.name}" created successfully`);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const deleteTopic = (name: string) => {
@@ -130,6 +138,21 @@ export function TopicsManagement() {
       offset: Math.floor(Math.random() * 10000),
     }));
   };
+
+  const getTopics = async () => {
+    try {
+      const [topicResponse] = await Promise.all([
+        axios.get(`${apiURL}/topics`)
+      ]);
+      setTopics(topicResponse.data)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    getTopics();
+  }, []);
 
   return (
     <div className="space-y-6">
