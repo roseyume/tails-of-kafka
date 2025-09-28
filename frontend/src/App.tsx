@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from "axios";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from './components/ui/sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Badge } from './components/ui/badge';
@@ -19,8 +20,27 @@ const navigation = [
   { name: 'Schema Registry', icon: Settings, id: 'schema' },
 ];
 
+const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
+
 export default function App() {
   const [activeSection, setActiveSection] = useState('dashboard');
+  const [topics, setTopics] = useState<string[]>([]);
+
+  const getTopics = async () => {
+    try {
+      const [topicResponse] = await Promise.all([
+        axios.get(`${apiURL}/topics`)
+      ]);
+      setTopics(topicResponse.data)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    getTopics();
+  }, []);
 
   const renderActiveSection = () => {
     switch (activeSection) {
@@ -29,11 +49,11 @@ export default function App() {
       case 'cluster':
         return <ClusterManagement />;
       case 'topics':
-        return <TopicsManagement />;
+        return <TopicsManagement topics={topics} setTopics={setTopics} />;
       case 'producers':
-        return <ProducersManagement />;
+        return <ProducersManagement topics={topics} />;
       case 'consumers':
-        return <ConsumersManagement />;
+        return <ConsumersManagement topics={topics}/>;
       case 'schema':
         return <SchemaRegistry />;
       default:

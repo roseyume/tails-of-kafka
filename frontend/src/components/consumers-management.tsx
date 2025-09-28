@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -66,7 +66,7 @@ interface PartitionReassignment {
   status: 'pending' | 'completed' | 'failed';
 }
 
-export function ConsumersManagement() {
+export function ConsumersManagement({topics}) {
   const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
 
   const [consumers, setConsumers] = useState<Consumer[]>([
@@ -132,36 +132,6 @@ export function ConsumersManagement() {
     },
   ]);
 
-  // Generate mock messages up to 10k
-  const [consumedMessages] = useState<Message[]>(() => {
-    const messages: Message[] = [];
-    const topics = ['user-events', 'order-events', 'notifications'];
-    const consumers = ['cons-1', 'cons-2', 'cons-3'];
-    const consumerNames = ['User Events Consumer', 'Order Processing Consumer', 'Notification Consumer'];
-    
-    for (let i = 0; i < 2500; i++) {
-      const topicIndex = i % topics.length;
-      const consumerIndex = i % consumers.length;
-      const topic = topics[topicIndex];
-      
-      messages.push({
-        key: `${topic}-${i}`,
-        value: JSON.stringify({
-          id: i,
-          timestamp: new Date(Date.now() - (i * 1000)).toISOString(),
-          data: `Sample data for ${topic} message ${i}`
-        }),
-        partition: i % 3,
-        offset: 10000 + i,
-        timestamp: new Date(Date.now() - (i * 1000)).toLocaleTimeString(),
-        topic,
-        consumerId: consumers[consumerIndex],
-        consumerName: consumerNames[consumerIndex],
-      });
-    }
-    
-    return messages.reverse(); // Most recent first
-  });
 
   const [partitionAssignments] = useState<PartitionAssignment[]>([
     { partition: 0, consumerId: 'cons-1', consumerName: 'User Events Consumer', offset: 1542, lag: 15 },
@@ -200,6 +170,7 @@ export function ConsumersManagement() {
     autoCommitInterval: 5000,
   });
 
+  const [consumedMessages, setConsumedMessages] = useState([]);
   const [isCreatingConsumer, setIsCreatingConsumer] = useState(false);
   const [selectedTopicForMessages, setSelectedTopicForMessages] = useState('user-events');
   const [selectedConsumerForMessages, setSelectedConsumerForMessages] = useState<string>('all');
@@ -217,9 +188,7 @@ export function ConsumersManagement() {
   });
   const messagesPerPage = 50;
 
-  const topics = ['user-events', 'order-events', 'notifications'];
-
-  const createConsumer = () => {
+  const createConsumer = async() => {
     if (!newConsumer.name.trim() || !newConsumer.groupId.trim() || newConsumer.topics.length === 0) {
       toast.error('Consumer name, group ID, and at least one topic are required');
       return;
@@ -233,7 +202,11 @@ export function ConsumersManagement() {
       rate: 0,
     };
 
-    setConsumers(prev => [...prev, consumer]);
+    const [consumerResponse] = await Promise.all([
+      axios.post(`${apiURL}/consumers/create`, newConsumer)
+    ]);
+    setConsumers(consumerResponse.data.consumers);
+
     setNewConsumer({
       name: '',
       groupId: '',
@@ -430,7 +403,7 @@ export function ConsumersManagement() {
                     <Label>Topics to Subscribe</Label>
                     <div className="space-y-2">
                       {topics.map(topic => (
-                        <label key={topic} className="flex items-center space-x-2">
+                        <label key={topic.name} className="flex items-center space-x-2">
                           <input
                             type="checkbox"
                             checked={newConsumer.topics.includes(topic)}
@@ -438,18 +411,18 @@ export function ConsumersManagement() {
                               if (e.target.checked) {
                                 setNewConsumer(prev => ({ 
                                   ...prev, 
-                                  topics: [...prev.topics, topic] 
+                                  topics: [...prev.topics, topic.name] 
                                 }));
                               } else {
                                 setNewConsumer(prev => ({ 
                                   ...prev, 
-                                  topics: prev.topics.filter(t => t !== topic) 
+                                  topics: prev.topics.filter(t => t !== topic.name) 
                                 }));
                               }
                             }}
                             className="rounded"
                           />
-                          <span className="text-sm">{topic}</span>
+                          <span className="text-sm">{topic.name}</span>
                         </label>
                       ))}
                     </div>
@@ -808,7 +781,7 @@ export function ConsumersManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     {topics.map(topic => (
-                      <SelectItem key={topic} value={topic}>{topic}</SelectItem>
+                      <SelectItem key={topic.name} value={topic.name}>{topic.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

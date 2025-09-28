@@ -18,11 +18,6 @@ interface Topic {
   partitions: number;
   replicationFactor: number;
   retentionHours: number;
-  messageCount: number;
-  size: string;
-  producers: number;
-  consumers: number;
-  status: 'active' | 'idle';
 }
 
 interface Partition {
@@ -33,44 +28,8 @@ interface Partition {
   offset: number;
 }
 
-export function TopicsManagement() {
+export function TopicsManagement({topics, setTopics}) {
   const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
-
-  const [topics, setTopics] = useState<Topic[]>([
-    {
-      name: 'user-events',
-      partitions: 3,
-      replicationFactor: 2,
-      retentionHours: 168,
-      messageCount: 15420,
-      size: '2.3 MB',
-      producers: 2,
-      consumers: 3,
-      status: 'active',
-    },
-    {
-      name: 'order-events',
-      partitions: 6,
-      replicationFactor: 3,
-      retentionHours: 720,
-      messageCount: 8935,
-      size: '1.8 MB',
-      producers: 1,
-      consumers: 2,
-      status: 'active',
-    },
-    {
-      name: 'notifications',
-      partitions: 2,
-      replicationFactor: 2,
-      retentionHours: 24,
-      messageCount: 0,
-      size: '0 B',
-      producers: 0,
-      consumers: 0,
-      status: 'idle',
-    },
-  ]);
 
   const [newTopic, setNewTopic] = useState({
     name: '',
@@ -95,22 +54,13 @@ export function TopicsManagement() {
 
     try {
       const [brokerResponse] = await Promise.all([
-        axios.get(`${apiURL}/topics`, newTopic)
+        axios.get(`${apiURL}/topics/create`, newTopic)
       ]);
 
-      const topic: Topic = {
-        ...newTopic,
-        messageCount: 0,
-        size: '0 B',
-        producers: 0,
-        consumers: 0,
-        status: 'idle',
-      };
-
-      setTopics(prev => [...prev, topic]);
-      setNewTopic({ name: '', partitions: 3, replicationFactor: 2, retentionHours: 168 });
+      setTopics(prev => [...prev, newTopic]);
       setIsCreatingTopic(false);
-      toast.success(`Topic "${topic.name}" created successfully`);
+      toast.success(`Topic "${newTopic.name}" created successfully`);
+      setNewTopic({ name: '', partitions: 3, replicationFactor: 2, retentionHours: 168 });
     } catch (err) {
       console.error(err);
     }
@@ -119,10 +69,6 @@ export function TopicsManagement() {
   const deleteTopic = (name: string) => {
     setTopics(prev => prev.filter(topic => topic.name !== name));
     toast.success(`Topic "${name}" deleted successfully`);
-  };
-
-  const getStatusColor = (status: string) => {
-    return status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
   };
 
   const getPartitionDetails = (topicName: string): Partition[] => {
@@ -139,30 +85,15 @@ export function TopicsManagement() {
     }));
   };
 
-  const getTopics = async () => {
-    try {
-      const [topicResponse] = await Promise.all([
-        axios.get(`${apiURL}/topics`)
-      ]);
-      setTopics(topicResponse.data)
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    getTopics();
-  }, []);
-
   return (
     <div className="space-y-6">
-      {/* Topics Overview */}
+      {/* Topics Table */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Topics Overview</CardTitle>
-              <CardDescription>Manage Kafka topics and their configurations</CardDescription>
+              <CardTitle>Topic Management</CardTitle>
+              <CardDescription>View and manage your Kafka topics</CardDescription>
             </div>
             <Dialog open={isCreatingTopic} onOpenChange={setIsCreatingTopic}>
               <DialogTrigger asChild>
@@ -248,49 +179,13 @@ export function TopicsManagement() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Total Topics</p>
-              <p className="text-2xl font-bold">{topics.length}</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Active Topics</p>
-              <p className="text-2xl font-bold text-green-600">
-                {topics.filter(t => t.status === 'active').length}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Total Partitions</p>
-              <p className="text-2xl font-bold">
-                {topics.reduce((sum, topic) => sum + topic.partitions, 0)}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Total Messages</p>
-              <p className="text-2xl font-bold">
-                {topics.reduce((sum, topic) => sum + topic.messageCount, 0).toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Topics Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Topic Management</CardTitle>
-          <CardDescription>View and manage your Kafka topics</CardDescription>
-        </CardHeader>
-        <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Topic Name</TableHead>
                 <TableHead>Partitions</TableHead>
                 <TableHead>Replication</TableHead>
-                <TableHead>Messages</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Retention Hours</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -300,13 +195,7 @@ export function TopicsManagement() {
                   <TableCell className="font-medium">{topic.name}</TableCell>
                   <TableCell>{topic.partitions}</TableCell>
                   <TableCell>{topic.replicationFactor}</TableCell>
-                  <TableCell>{topic.messageCount.toLocaleString()}</TableCell>
-                  <TableCell>{topic.size}</TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(topic.status)}>
-                      {topic.status}
-                    </Badge>
-                  </TableCell>
+                  <TableCell>{topic.retentionHours}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
                       <Dialog>
@@ -331,7 +220,6 @@ export function TopicsManagement() {
                             <TabsList>
                               <TabsTrigger value="partitions">Partitions</TabsTrigger>
                               <TabsTrigger value="config">Configuration</TabsTrigger>
-                              <TabsTrigger value="metrics">Metrics</TabsTrigger>
                             </TabsList>
                             
                             <TabsContent value="partitions" className="space-y-4">
@@ -376,27 +264,6 @@ export function TopicsManagement() {
                                 <div>
                                   <Label>Min In-Sync Replicas</Label>
                                   <p className="text-sm text-muted-foreground">1</p>
-                                </div>
-                              </div>
-                            </TabsContent>
-                            
-                            <TabsContent value="metrics" className="space-y-4">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label>Active Producers</Label>
-                                  <p className="text-2xl font-bold">{topic.producers}</p>
-                                </div>
-                                <div>
-                                  <Label>Active Consumers</Label>
-                                  <p className="text-2xl font-bold">{topic.consumers}</p>
-                                </div>
-                                <div>
-                                  <Label>Messages/sec</Label>
-                                  <p className="text-2xl font-bold">{Math.floor(Math.random() * 100)}</p>
-                                </div>
-                                <div>
-                                  <Label>Bytes/sec</Label>
-                                  <p className="text-2xl font-bold">{Math.floor(Math.random() * 1000)} KB</p>
                                 </div>
                               </div>
                             </TabsContent>

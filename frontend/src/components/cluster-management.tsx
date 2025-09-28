@@ -60,7 +60,7 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
     toast.success(`Broker ${id} removed from cluster`);
   };
 
-  const addBroker = async () => {
+  const createBroker = async () => {
     const [brokerResponse] = await Promise.all([
       axios.get(`${apiURL}/brokers/create`)
     ]);
@@ -109,7 +109,7 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
               <CardTitle>Cluster Overview</CardTitle>
               <CardDescription>Manage your Kafka cluster brokers</CardDescription>
             </div>
-            <Button onClick={addBroker}>
+            <Button onClick={createBroker}>
               <Plus className="w-4 h-4 mr-2" />
               Add Broker
             </Button>

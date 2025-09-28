@@ -1,16 +1,17 @@
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic, ConfigResource
 from confluent_kafka import Consumer, Producer, TopicPartition, KafkaException, KafkaError
-from typing import List, Optional, Dict
-from fastapi import HTTPException
+from typing import List, Optional, Dict, Literal
+from fastapi import FastAPI, HTTPException
 import logging
 import yaml
 import subprocess
 import os
 import sys
 import time
+import threading
+import random
 
 # ----------------------------
 # Configure root logger
@@ -33,6 +34,30 @@ origins = [
     "*"                        # (optional, allow all origins - use carefully!)
 ]
 
+# Cat gossip messages for continuous messaging feature
+cat_gossip_messages = [
+" saw a suspicious squirrel in the oak tree. Investigation ongoing.",
+" reports that the mailman arrived 3 minutes early today. Concerning.",
+" observed the neighbors getting a new cat carrier. Possible escape plan needed.",
+" confirms that the red dot is still at large. All units on high alert.",
+" spotted unknown cat in backyard at 0300 hours. Territory breach!",
+" notes that dinner was served 2.5 minutes late. Unacceptable service levels.",
+" reports successful counter-surfing mission. Tuna sandwich acquired.",
+" witnessed the humans moving furniture. Possible fortress reconstruction.",
+" confirms that the laser pointer has been relocated to top shelf. Access denied.",
+" reports strange noises from the washing machine. Possible monster habitat.",
+" observed the vacuum cleaner in closet. Threat level: Orange.",
+" successfully infiltrated the forbidden bathroom counter. Mission accomplished.",
+" reports that new scratching post has been delivered. Quality testing required.",
+" witnessed delivery truck. Possible invasion. Recommend increased vigilance.",
+" confirms that catnip stash remains hidden from human detection.",
+" reports successful nap completion. Duration: 14.7 hours. Highly satisfactory.",
+" observed bird activity outside window increasing by 23%. Hunting opportunities abound.",
+" confirms that favorite cardboard box has been moved. Emergency protocols activated.",
+" reports that water bowl is now 78% full instead of usual 80%. Concerning trend.",
+" witnessed treat jar opening. All units converged within 0.3 seconds."
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,        # list of allowed origins
@@ -40,15 +65,6 @@ app.add_middleware(
     allow_methods=["*"],          # allow all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],          # allow all headers
 )
-
-# Kafka Admin client
-admin = AdminClient({"bootstrap.servers": "localhost:9092"})
-
-# Consumers
-consumers = {}
-
-# Producers
-producers = {}
 
 # -------------------------------
 # Request models
@@ -67,11 +83,28 @@ class Topic(BaseModel):
     partitions: int
     replicationFactor: int
     retentionHours: int
-    messageCount: int
-    size: str
-    producers: int
-    consumers: int
-    status: str
+
+class ProducerInfo(BaseModel):
+    name: str
+    topic: str
+    messagesSent: int
+    batchSize: int 
+    lingerMs: int
+    acks: str
+    retries: int
+    compressionType: str
+
+class ConsumerInfo(BaseModel):
+    id: str
+    name: str
+    groupId: str
+    topics: List[str]
+    status: Literal['running', 'stopped', 'error'] = 'stopped'
+    messagesConsumed: int = 0
+    rate: float = 0.0  # messages per second
+    autoOffsetReset: Literal['earliest', 'latest', 'none'] = 'earliest'
+    enableAutoCommit: bool = True
+    autoCommitInterval: int = 5000  # in milliseconds
 
 class TopicRequest(BaseModel):
     name: str
@@ -84,9 +117,10 @@ class PartitionsRequest(BaseModel):
     additional_partitions: int
 
 class ProducerRequest(BaseModel):
-    producer_id: str
+    name: str
     topic: str
     message: str
+    partition: Optional[int] = 0   
 
 class ConsumerConfigRequest(BaseModel):
     consumer_id: str                # unique internal key
@@ -100,13 +134,31 @@ class ConsumerConfigRequest(BaseModel):
     fetch_min_bytes: Optional[int] = 1_000
     offsets: Optional[Dict[str, int]] = None  # {topic: offset}
 
+
 class ProducerConfigRequest(BaseModel):
-    producer_id: str
-    acks: str = "all"           # all, 1, 0
-    linger_ms: int = 0
-    compression_type: str = "none"
+    name: str
+    topic: str
+    acks: str = "1"
+    batchSize: int = 100
+    lingerMs: int = 0
+    retries: int = 0
+    compressionType: str = "none"
+
+class GossipRequest(BaseModel):
+    durationSeconds: int
+    topic: str
 
 logger.info("This will always appear if flush is enabled by default")
+
+# Kafka Admin client
+admin = AdminClient({"bootstrap.servers": "localhost:9092"})
+
+# Consumers
+consumers: Dict[str, Consumer] = {}
+
+# Producers
+producers: Dict[str, Producer] = {}
+producer_metadata: Dict[str, ProducerInfo] = {}
 
 # -------------------------------
 # Admin endpoints
@@ -202,7 +254,7 @@ def find_service_name(broker_id: int) -> str:
 
 
 @app.get("/brokers/create")
-async def add_broker():
+async def create_broker():
     try:
         if not os.path.exists(DOCKER_COMPOSE_FILE):
             raise HTTPException(status_code=500, detail="docker-compose.yml not found")
@@ -350,20 +402,6 @@ def format_bytes(size_in_bytes: int) -> str:
         size_in_bytes /= 1024
     return f"{size_in_bytes:.2f} PB"
 
-def get_topic_metrics(topic_name: str):
-    """
-    Stub function: implement your logic to count messages, size, producers, consumers.
-    This usually requires tracking offsets or using Kafka monitoring APIs.
-    """
-    # Example static values for demonstration
-    return {
-        "messageCount": 15420,
-        "size": format_bytes(2.3 * 1024 * 1024),
-        "producers": 2,
-        "consumers": 3,
-        "status": "active"
-    }
-
 @app.get("/topics", response_model=list[Topic])
 def list_topics():
     try:
@@ -377,18 +415,11 @@ def list_topics():
             retention_ms = get_topic_config(topic_name)
             retention_hours = retention_ms // (1000 * 60 * 60)
 
-            metrics = get_topic_metrics(topic_name)
-
             topics.append(Topic(
                 name=topic_name,
                 partitions=partitions,
                 replicationFactor=replication_factor,
                 retentionHours=retention_hours,
-                messageCount=metrics["messageCount"],
-                size=metrics["size"],
-                producers=metrics["producers"],
-                consumers=metrics["consumers"],
-                status=metrics["status"]
             ))
 
         return topics
@@ -398,7 +429,7 @@ def list_topics():
         return []
 
 
-@app.post("/topics")
+@app.post("/topics/create")
 def create_topic(req: TopicRequest):
     retention_ms = retention_hours * 60 * 60 * 1000  # convert hours → milliseconds
 
@@ -437,7 +468,35 @@ def list_partitions():
 # -------------------------------
 # Consumers
 # -------------------------------
-@app.put("/consumer/{consumer_id}")
+@app.post("/consumers/create")
+def create_consumer(consumer_info: ConsumerInfo):
+    if consumer_info.id in consumers:
+        raise HTTPException(status_code=400, detail="Consumer ID already exists")
+
+    # Kafka consumer configuration
+    conf = {
+        "bootstrap.servers": "localhost:9092",  # default, could be extended to frontend
+        "group.id": consumer_info.groupId,
+        "auto.offset.reset": consumer_info.autoOffsetReset,
+        "enable.auto.commit": consumer_info.enableAutoCommit,
+        "auto.commit.interval.ms": consumer_info.autoCommitInterval
+    }
+
+    try:
+        kafka_consumer = Consumer(conf)
+        kafka_consumer.subscribe(consumer_info.topics)
+    except KafkaException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create consumer: {e}")
+
+    # Store the consumer in the global dict
+    consumers[consumer_info.id] = kafka_consumer
+
+    return {
+        "message": f"Consumer {consumer_info.name} ({consumer_info.id}) added successfully",
+        "consumer": consumer_info.dict()
+    }
+
+@app.put("/consumers/{consumer_id}")
 def update_consumer(consumer_id: str, req: ConsumerConfigRequest):
     if consumer_id not in consumers:
         print("Consumer " + str(consumer_id) + " found")
@@ -495,30 +554,171 @@ def consume_from_consumer(consumer_id: str, count: int = 10):
 # -------------------------------
 # Producers
 # -------------------------------
-@app.post("/producer")
-def update_producer(producer_id: str, req: ProducerConfigRequest):
-    if producer_id not in producers:
-        raise HTTPException(status_code=404, detail="Producer not found")
-    else:
-        producer = producers[producer_id]
-        old_producer.flush()
-    # Confluent Kafka producers are stateless, so just recreate
-    from confluent_kafka import Producer
+@app.get("/producers")
+async def get_producers():
+    return list(producer_metadata.values())
+
+@app.post("/producers/create")
+async def create_producer(req: ProducerConfigRequest):
+    if req.name in producers:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Producer '{req.name}' already exists"
+        )
+
     producer = Producer({
         "bootstrap.servers": "localhost:9092",
         "acks": req.acks,
-        "linger.ms": req.linger_ms,
-        "compression.type": req.compression_type
+        "batch.size": req.batchSize,  
+        "linger.ms": req.lingerMs,
+        "compression.type": req.compressionType,
+        "retries": req.retries,
     })
-    producers[producer_id] = producer
-    return {"success": True, "producer_id": producer_id}
+
+    producers[req.name] = producer
+
+    producer_metadata[req.name] = ProducerInfo(
+        name=req.name,
+        topic=req.topic,
+        messagesSent=0,
+        acks = req.acks,
+        batchSize = req.batchSize,
+        lingerMs = req.lingerMs,
+        retries = req.retries,
+        compressionType = req.compressionType
+    )
+    
+    return {
+        "success": True,
+        "producer": producer_metadata[req.name],
+        "producers": await get_producers()
+    }
+
+@app.post("/producers")
+async def update_producer(req: ProducerConfigRequest):
+    logger.info(producers)
+    logger.info(producer_metadata)
+    if req.name in producers:
+        # Flush and discard old producer
+        producers[req.name].flush()
+
+    logger.info(req)
+    producer = Producer({
+        "bootstrap.servers": "localhost:9092",
+        "acks": req.acks,
+        "batch.size": req.batchSize,  
+        "linger.ms": req.lingerMs,
+        "compression.type": req.compressionType,
+        "retries": req.retries,
+    })
+
+    producers[req.name] = producer
+    producer_metadata[req.name] = ProducerInfo(
+        name=req.name,
+        topic=req.topic,
+        messagesSent=0,
+        acks = req.acks,
+        batchSize = req.batchSize,
+        lingerMs = req.lingerMs,
+        retries = req.retries,
+        compressionType = req.compressionType
+    )
+    return {"success": True, "producer_name": req.name, "producers": await get_producers()}
 
 @app.post("/produce")
-def produce_message(req: ProducerRequest):
+async def produce_message(req: ProducerRequest):
+    if req.name not in producers:
+        raise HTTPException(status_code=404, detail="Producer not found")
+
+    producer = producers[req.name]
+
     try:
-        producer = Producer({'bootstrap.servers': 'localhost:9092'})
         producer.produce(req.topic, req.message.encode())
         producer.flush()
-        return {"success": True, "topic": req.topic, "message": req.message}
+
+        # update stats
+        meta = producer_metadata[req.name]
+        meta.messagesSent += 1
+
+        return {
+            "success": True,
+            "topic": req.topic,
+            "message": req.message,
+            "producer_name": req.name,
+            "producers": await get_producers()
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.delete("/producers/{name}")
+async def delete_producer(name: str):
+    logger.info(producers)
+    if name not in producers:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Producer '{name}' not found"
+        )
+
+    try:
+        producer = producers.pop(name)
+        producer.flush(timeout=5)  # flush pending messages
+        producer_metadata.pop(name)
+
+        return {
+            "success": True,
+            "message": f"Producer '{name}' stopped and removed",
+            "producers": await get_producers()
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error stopping producer '{name}': {str(e)}"
+        )
+
+def send_cat_gossip(name: str, topic: str, duration: int):
+    """Background thread to send gossip messages for duration"""
+    if name not in producers:
+        return
+    
+    producer = producers[name]
+    meta = producer_metadata[name]
+    end_time = time.time() + duration
+
+    while time.time() < end_time:
+        random_message = random.choice(cat_gossip_messages)
+        cat_name = random.choice(['Whiskers', 'Mr. Mittens', 'Luna', 'Shadow', 'Princess Fluffy', 'Garfield'])
+ 
+        msg = cat_name + random_message
+        try:
+            producer.produce(topic, msg.encode("utf-8"))
+            meta.messagesSent += 1
+            logger.info(f"[CAT GOSSIP] {name} -> {topic}: {msg}")
+        except Exception as e:
+            logger.error(f"Producer {name} error: {e}")
+            break
+        time.sleep(1)  # send roughly 1 message per second
+    
+    producer.flush()
+
+@app.post("/producers/cat-gossip/{name}")
+def start_cat_gossip(name: str, req: GossipRequest):
+    logger.info(producers)
+    logger.info(producer_metadata)
+    if name not in producers:
+        raise HTTPException(status_code=404, detail="Producer not found")
+
+    # Start gossiping in background thread
+    thread = threading.Thread(
+        target=send_cat_gossip,
+        args=(name, req.topic, req.durationSeconds),
+        daemon=True
+    )
+    thread.start()
+
+    return {
+        "success": True,
+        "producer_id": name,
+        "topic": req.topic,
+        "duration_seconds": req.durationSeconds,
+        "status": "cat gossip mission started"
+    }
