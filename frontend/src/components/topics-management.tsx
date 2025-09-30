@@ -54,7 +54,7 @@ export function TopicsManagement({topics, setTopics}) {
 
     try {
       const [brokerResponse] = await Promise.all([
-        axios.get(`${apiURL}/topics/create`, newTopic)
+        axios.post(`${apiURL}/topics/create`, newTopic)
       ]);
 
       setTopics(prev => [...prev, newTopic]);

@@ -1,16 +1,25 @@
 tasks:
   - name: Setup Kafka Environment
-    command: |
+    init: |
       gp open README.md
       export PUBLIC_IP=127.0.0.1
-      docker-compose up -d
+      echo "Downloading libraries..."
       pip install -r requirements.txt
-      uvicorn backend.main:app --reload --port 8000 --host 0.0.0.0
       npm install axios react-bootstrap bootstrap vite
+    command: |
+      echo "Starting images..."
+      docker-compose up -d
+
+      echo "Waiting for PostgreSQL to initialize..."
+      sleep 10
+
+      echo "Starting kafka dashboard..."
       cd frontend
-      npm run dev
-      gp ports visibility 8000:public
-      gp ports visibility 3000:public
+      sleep 10 && npm run dev &   # background React
+
+      cd ..
+      echo "Starting fast api..."
+      uvicorn backend.main:app --reload --port 8000 --host 0.0.0.0
   
 env:
   KAFKAJS_NO_PARTITIONER_WARNING: "1"
@@ -38,13 +47,17 @@ ports:
   # Kafka Schema Registry 
   - port: 8081
     onOpen: ignore
-
+  # Fast Api
   - port: 8000
     visibility: public
     onOpen: ignore
+  # Kafka Dashboard
   - port: 3000
     visibility: public
     onOpen: open-preview
+  # Postgres Database
+  - port: 5432
+    onOpen: ignore
 
 
 

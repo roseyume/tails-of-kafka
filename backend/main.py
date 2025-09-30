@@ -2,16 +2,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic, ConfigResource
 from confluent_kafka import Consumer, Producer, TopicPartition, KafkaException, KafkaError
-from typing import List, Optional, Dict, Literal
 from fastapi import FastAPI, HTTPException
+from backend.models.schemas import *
+from backend.database.init import database
+from backend.database.tables import messages
+from backend.kafka_consumer import consume_single_consumer
 import logging
 import yaml
 import subprocess
 import os
 import sys
 import time
-import threading
+import threading, queue
 import random
+import asyncio
+from sqlalchemy import func
 
 # ----------------------------
 # Configure root logger
@@ -25,6 +30,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup():
+    logger.info("Before")
+    await database.connect()
+    logger.info("After")
+
+@app.on_event("shutdown")
+async def shutdown():
+    for consumer_name in consumer_stop_events.keys():
+        consumer_stop_events[consumer_name].set()  # signal to stop
+        consumer_threads[consumer_name].join()     # wait for thread to finish
+        consumers[consumer_name].close()
+        print(f"Consumer {consumer_name} stopped gracefully")
+    await database.disconnect()
 
 # Allow your React app to call this backend
 origins = [
@@ -64,89 +84,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],          # allow all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],          # allow all headers
-)
-
-# -------------------------------
-# Request models
-# -------------------------------
-class Broker(BaseModel):
-    broker_id: int
-    hostname: str
-    port: int
-    role: str  # 'controller' | 'follower'
-    status: str  # 'running' | 'stopped' | 'error'
-    num_partitions_as_leader: int = 0
-    num_partitions_as_follower: int = 0
-
-class Topic(BaseModel):
-    name: str
-    partitions: int
-    replicationFactor: int
-    retentionHours: int
-
-class ProducerInfo(BaseModel):
-    name: str
-    topic: str
-    messagesSent: int
-    batchSize: int 
-    lingerMs: int
-    acks: str
-    retries: int
-    compressionType: str
-
-class ConsumerInfo(BaseModel):
-    id: str
-    name: str
-    groupId: str
-    topics: List[str]
-    status: Literal['running', 'stopped', 'error'] = 'stopped'
-    messagesConsumed: int = 0
-    rate: float = 0.0  # messages per second
-    autoOffsetReset: Literal['earliest', 'latest', 'none'] = 'earliest'
-    enableAutoCommit: bool = True
-    autoCommitInterval: int = 5000  # in milliseconds
-
-class TopicRequest(BaseModel):
-    name: str
-    partitions: int = 1
-    replication_factor: int = 1
-    retentionHours: int = 168
-
-class PartitionsRequest(BaseModel):
-    name: str
-    additional_partitions: int
-
-class ProducerRequest(BaseModel):
-    name: str
-    topic: str
-    message: str
-    partition: Optional[int] = 0   
-
-class ConsumerConfigRequest(BaseModel):
-    consumer_id: str                # unique internal key
-    name: Optional[str] = None      # human-readable name
-    group_id: str
-    topics: List[str]
-    enable_auto_commit: bool = True
-    auto_offset_reset: str = "latest"
-    max_poll_records: Optional[int] = 500
-    isolation_level: Optional[str] = "read_uncommitted"
-    fetch_min_bytes: Optional[int] = 1_000
-    offsets: Optional[Dict[str, int]] = None  # {topic: offset}
-
-
-class ProducerConfigRequest(BaseModel):
-    name: str
-    topic: str
-    acks: str = "1"
-    batchSize: int = 100
-    lingerMs: int = 0
-    retries: int = 0
-    compressionType: str = "none"
-
-class GossipRequest(BaseModel):
-    durationSeconds: int
-    topic: str
+) 
 
 logger.info("This will always appear if flush is enabled by default")
 
@@ -155,6 +93,9 @@ admin = AdminClient({"bootstrap.servers": "localhost:9092"})
 
 # Consumers
 consumers: Dict[str, Consumer] = {}
+consumer_metadata: Dict[str, ConsumerInfo] = {}
+consumer_threads = {}       
+consumer_stop_events = {}   
 
 # Producers
 producers: Dict[str, Producer] = {}
@@ -431,12 +372,12 @@ def list_topics():
 
 @app.post("/topics/create")
 def create_topic(req: TopicRequest):
-    retention_ms = retention_hours * 60 * 60 * 1000  # convert hours → milliseconds
+    retention_ms = req.retentionHours * 60 * 60 * 1000  # convert hours → milliseconds
 
     new_topic = NewTopic(
-        topic=name,
-        num_partitions=num_partitions,
-        replication_factor=replication_factor,
+        topic=req.name,
+        num_partitions=req.partitions,
+        replication_factor=req.replicationFactor,
         config={"retention.ms": str(retention_ms)}
     )
 
@@ -444,10 +385,10 @@ def create_topic(req: TopicRequest):
 
     for topic_name, f in fs.items():
         try:
-            f.result()  # wait for creation
-            logger.info("Topic %s created successfully", topic_name)
+            f.result()
+            return {"success": True, "topic": topic_name}
         except Exception as e:
-            logger.error("Failed to create topic %s: %s", topic_name, e)
+            return {"success": False, "error": str(e)}
             
 @app.post("/partitions")
 def add_partitions(req: PartitionsRequest):
@@ -468,42 +409,73 @@ def list_partitions():
 # -------------------------------
 # Consumers
 # -------------------------------
+@app.get("/consumers")
+def get_consumers():
+    return list(consumer_metadata.values())
+
 @app.post("/consumers/create")
-def create_consumer(consumer_info: ConsumerInfo):
-    if consumer_info.id in consumers:
+async def create_consumer(req: ConsumerInfo):
+    if req.name in consumers:
         raise HTTPException(status_code=400, detail="Consumer ID already exists")
 
     # Kafka consumer configuration
     conf = {
         "bootstrap.servers": "localhost:9092",  # default, could be extended to frontend
-        "group.id": consumer_info.groupId,
-        "auto.offset.reset": consumer_info.autoOffsetReset,
-        "enable.auto.commit": consumer_info.enableAutoCommit,
-        "auto.commit.interval.ms": consumer_info.autoCommitInterval
+        "group.id": req.groupId,
+        "auto.offset.reset": req.autoOffsetReset,
+        "enable.auto.commit": req.enableAutoCommit,
+        "auto.commit.interval.ms": req.autoCommitInterval
     }
 
     try:
         kafka_consumer = Consumer(conf)
-        kafka_consumer.subscribe(consumer_info.topics)
+        metadata = admin.list_topics(timeout=5)
+        topic_meta = metadata.topics[req.topics[0]]
+        total_messages = 0
+        for partition_id, partition_meta in topic_meta.partitions.items():
+            low, high = kafka_consumer.get_watermark_offsets(TopicPartition(req.topics[0], partition_id))
+            messages_in_partition = high - low
+            total_messages += messages_in_partition
+        logger.info("Messages found")
+        logger.info(total_messages)
     except KafkaException as e:
         raise HTTPException(status_code=500, detail=f"Failed to create consumer: {e}")
 
+
+    stop_event = threading.Event()
+    consumer_stop_events[req.name] = stop_event
+    t = threading.Thread(target=consume_single_consumer, args=(req.name, req.topics, kafka_consumer, stop_event,  asyncio.get_running_loop()))
+    t.start()
+    consumer_threads[req.name] = t
+
     # Store the consumer in the global dict
-    consumers[consumer_info.id] = kafka_consumer
+    consumers[req.name] = kafka_consumer
+    consumer_metadata[req.name] = ConsumerInfo(
+        name=req.name,
+        groupId=req.groupId,
+        topics=req.topics,
+        status='running',
+        messagesConsumed=0,
+        autoOffsetRest=req.autoOffsetReset,
+        enableAutoCommit=req.enableAutoCommit,
+        autoCommitInterval=req.autoCommitInterval
+    )
 
     return {
-        "message": f"Consumer {consumer_info.name} ({consumer_info.id}) added successfully",
-        "consumer": consumer_info.dict()
+        "message": f"Consumer {req.name} added successfully",
+        "consumer": req.dict(),
+        "consumers": get_consumers()
     }
 
-@app.put("/consumers/{consumer_id}")
-def update_consumer(consumer_id: str, req: ConsumerConfigRequest):
-    if consumer_id not in consumers:
-        print("Consumer " + str(consumer_id) + " found")
+@app.put("/consumers/{consumer_name}")
+def update_consumer(consumer_name: str, req: ConsumerConfigRequest):
+    if consumer_name not in consumers:
+        print("Consumer " + str(consumer_name) + " found")
     else:
         # Close existing consumer safely
-        old_consumer = consumers[consumer_id]
-        old_consumer.close()
+        consumer_stop_events[consumer_name].set()  # signal to stop
+        consumer_threads[consumer_name].join()     # wait for thread to finish
+        consumers[consumer_name].close()
     
     # Re-create consumer with new config
     consumer_config = {
@@ -524,42 +496,103 @@ def update_consumer(consumer_id: str, req: ConsumerConfigRequest):
     else:
         consumer.subscribe(req.topics)
     
-    consumers[consumer_id] = consumer
+    consumers[consumer_name] = consumer
+    consumer_metadata[req.name] = ConsumerInfo(
+        name=req.name,
+        groupId=req.groupId,
+        topics=req.topics,
+        status='running',
+        messagesConsumed=0,
+        autoOffsetRest=req.autoOffsetReset,
+        enableAutoCommit=req.enableAutoCommit,
+        autoCommitInterval=req.autoCommitInterval
+    )
+
     return {
         "success": True,
-        "consumer_id": consumer_id,
+        "consumer_name": consumer_name,
         "group_id": req.group_id,
         "topics": req.topics,
-        "manual_offsets": req.offsets is not None
+        "manual_offsets": req.offsets is not None,
+        "consumers": get_consumers()
     }
+
+@app.delete("/consumers/{consumer_name}")
+def delete_consumer(consumer_name: str):
+    if consumer_name not in consumers:
+        raise HTTPException(status_code=404, detail="Consumer not found")
+
+    try:
+        consumer_stop_events[consumer_name].set()  # signal to stop
+        consumer_threads[consumer_name].join()     # wait for thread to finish           
+        print(f"Consumer {consumer_name} stopped gracefully")
+        
+        # Remove from dictionaries
+        del consumer_stop_events[consumer_name]
+        del consumer_threads[consumer_name]
+        consumer = consumers.pop(consumer_name)   # remove from active consumers
+        consumer_metadata.pop(consumer_name, None)  # clean up metadata if present
+
+        return {"success": True, "message": f"Consumer {consumer_name} deleted", "consumers": get_consumers()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete consumer: {str(e)}")
 
 # -------------------------------
 # Endpoint: Consume latest messages from a configured consumer
 # -------------------------------
-@app.get("/consume/{consumer_id}")
-def consume_from_consumer(consumer_id: str, count: int = 10):
-    if consumer_id not in consumers:
-        return {"success": False, "error": f"Consumer {consumer_id} not found"}
-    consumer = consumers[consumer_id]
-    messages = []
-    for _ in range(count):
-        msg = consumer.poll(timeout=1.0)
-        if msg is None:
-            continue
-        if msg.error():
-            continue
-        messages.append(msg.value().decode())
-    return {"success": True, "messages": messages}
+@app.post("/consume")
+async def get_consumer_messages(req: ConsumerRequest):
+    logger.info(req.consumerName)
+    logger.info(consumers)
+    if req.consumerName and req.consumerName not in consumers:
+        raise HTTPException(status_code=404, detail="Consumer not found")
+    
+    query = messages.select()
+    count_query = messages.select().with_only_columns(func.count())
+
+
+    # Filter by consumer name
+    if req.consumerName:
+        query = query.where(messages.c.consumer_name == req.consumerName)
+        count_query = count_query.where(messages.c.consumer_name == req.consumerName)
+
+    # Filter by topic
+    if req.topic:
+        query = query.where(messages.c.topic == req.topic)
+        count_query = count_query.where(messages.c.topic == req.topic)
+    # Filter by searchTerm
+    if req.searchTerm:
+        query = query.where(messages.c.value.ilike(f"%{searchTerm}%"))
+        count_query = count_query.where(messages.c.value.ilike(f"%{searchTerm}%"))
+
+    # Order newest first by timestamp
+    query = query.order_by(messages.c.timestamp.desc())
+    
+    # Pagination
+    query = query.limit(req.limit).offset(req.offset)
+    results = await database.fetch_all(query)
+
+    # Total count for remaining offsets
+    total_count = await database.fetch_val(count_query)
+    
+    return {
+        "consumerName": req.consumerName or "all",
+        "topic": req.topic or "all",
+        "limit": req.limit,
+        "messageOffset": req.offset,
+        "messages": results,
+        "totalCount": total_count,
+    }
 
 # -------------------------------
 # Producers
 # -------------------------------
 @app.get("/producers")
-async def get_producers():
+def get_producers():
     return list(producer_metadata.values())
 
 @app.post("/producers/create")
-async def create_producer(req: ProducerConfigRequest):
+def create_producer(req: ProducerConfigRequest):
     if req.name in producers:
         raise HTTPException(
             status_code=400, 
@@ -591,11 +624,11 @@ async def create_producer(req: ProducerConfigRequest):
     return {
         "success": True,
         "producer": producer_metadata[req.name],
-        "producers": await get_producers()
+        "producers": get_producers()
     }
 
 @app.post("/producers")
-async def update_producer(req: ProducerConfigRequest):
+def update_producer(req: ProducerConfigRequest):
     logger.info(producers)
     logger.info(producer_metadata)
     if req.name in producers:
@@ -623,10 +656,10 @@ async def update_producer(req: ProducerConfigRequest):
         retries = req.retries,
         compressionType = req.compressionType
     )
-    return {"success": True, "producer_name": req.name, "producers": await get_producers()}
+    return {"success": True, "producer_name": req.name, "producers": get_producers()}
 
 @app.post("/produce")
-async def produce_message(req: ProducerRequest):
+def produce_message(req: ProducerRequest):
     if req.name not in producers:
         raise HTTPException(status_code=404, detail="Producer not found")
 
@@ -645,13 +678,13 @@ async def produce_message(req: ProducerRequest):
             "topic": req.topic,
             "message": req.message,
             "producer_name": req.name,
-            "producers": await get_producers()
+            "producers": get_producers()
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 @app.delete("/producers/{name}")
-async def delete_producer(name: str):
+def delete_producer(name: str):
     logger.info(producers)
     if name not in producers:
         raise HTTPException(
@@ -667,7 +700,7 @@ async def delete_producer(name: str):
         return {
             "success": True,
             "message": f"Producer '{name}' stopped and removed",
-            "producers": await get_producers()
+            "producers": get_producers()
         }
     except Exception as e:
         raise HTTPException(
@@ -722,3 +755,4 @@ def start_cat_gossip(name: str, req: GossipRequest):
         "duration_seconds": req.durationSeconds,
         "status": "cat gossip mission started"
     }
+

@@ -17,7 +17,6 @@ import { MessageSquare, Plus, Trash2, Play, Square, Users, Eye, ArrowLeftRight, 
 import { toast } from 'sonner@2.0.3';
 
 interface Consumer {
-  id: string;
   name: string;
   groupId: string;
   topics: string[];
@@ -37,6 +36,14 @@ interface ConsumerGroup {
   lag: number;
 }
 
+interface ConsumerRequest {
+  consumerName?: string;
+  topic?: string;
+  searchTerm?: string;
+  limit: number;
+  offset: number;
+}
+
 interface Message {
   key: string;
   value: string;
@@ -44,13 +51,11 @@ interface Message {
   offset: number;
   timestamp: string;
   topic: string;
-  consumerId?: string;
   consumerName?: string;
 }
 
 interface PartitionAssignment {
   partition: number;
-  consumerId: string;
   consumerName: string;
   offset: number;
   lag: number;
@@ -71,7 +76,6 @@ export function ConsumersManagement({topics}) {
 
   const [consumers, setConsumers] = useState<Consumer[]>([
     {
-      id: 'cons-1',
       name: 'User Events Consumer',
       groupId: 'user-analytics',
       topics: ['user-events'],
@@ -83,7 +87,6 @@ export function ConsumersManagement({topics}) {
       autoCommitInterval: 5000,
     },
     {
-      id: 'cons-2',
       name: 'Order Processing Consumer',
       groupId: 'order-processing',
       topics: ['order-events'],
@@ -95,7 +98,6 @@ export function ConsumersManagement({topics}) {
       autoCommitInterval: 1000,
     },
     {
-      id: 'cons-3',
       name: 'Notification Consumer',
       groupId: 'notifications',
       topics: ['notifications'],
@@ -134,10 +136,10 @@ export function ConsumersManagement({topics}) {
 
 
   const [partitionAssignments] = useState<PartitionAssignment[]>([
-    { partition: 0, consumerId: 'cons-1', consumerName: 'User Events Consumer', offset: 1542, lag: 15 },
-    { partition: 1, consumerId: 'cons-1', consumerName: 'User Events Consumer', offset: 1541, lag: 8 },
-    { partition: 2, consumerId: 'cons-2', consumerName: 'Order Processing Consumer', offset: 893, lag: 23 },
-    { partition: 0, consumerId: 'cons-2', consumerName: 'Order Processing Consumer', offset: 445, lag: 12 },
+    { partition: 0, consumerName: 'cons-1', offset: 1542, lag: 15 },
+    { partition: 1, consumerName: 'cons-1', offset: 1541, lag: 8 },
+    { partition: 2, consumerName: 'cons-2', offset: 893, lag: 23 },
+    { partition: 0, consumerName: 'cons-2', offset: 445, lag: 12 },
   ]);
 
   const [partitionReassignments, setPartitionReassignments] = useState<PartitionReassignment[]>([
@@ -170,13 +172,14 @@ export function ConsumersManagement({topics}) {
     autoCommitInterval: 5000,
   });
 
-  const [consumedMessages, setConsumedMessages] = useState([]);
+  const [consumedMessages, setConsumedMessages] = useState<Message[]>([]);
   const [isCreatingConsumer, setIsCreatingConsumer] = useState(false);
-  const [selectedTopicForMessages, setSelectedTopicForMessages] = useState('user-events');
+  const [selectedTopicForMessages, setSelectedTopicForMessages] = useState('all');
   const [selectedConsumerForMessages, setSelectedConsumerForMessages] = useState<string>('all');
   const [messageViewMode, setMessageViewMode] = useState<'topic' | 'consumer'>('topic');
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [totalPages, setTotalPages] = useState(0);
   const [editingConsumer, setEditingConsumer] = useState<Consumer | null>(null);
   const [isEditingConfig, setIsEditingConfig] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -195,7 +198,6 @@ export function ConsumersManagement({topics}) {
     }
 
     const consumer: Consumer = {
-      id: `cons-${Date.now()}`,
       ...newConsumer,
       status: 'stopped',
       messagesConsumed: 0,
@@ -219,9 +221,9 @@ export function ConsumersManagement({topics}) {
     toast.success(`Consumer "${consumer.name}" created successfully`);
   };
 
-  const startConsumer = (id: string) => {
+  const startConsumer = (name: string) => {
     setConsumers(prev => prev.map(consumer => 
-      consumer.id === id ? { 
+      consumer.name === name ? { 
         ...consumer, 
         status: 'running' as const,
         rate: Math.floor(Math.random() * 30) + 5 
@@ -230,9 +232,9 @@ export function ConsumersManagement({topics}) {
     toast.success('Consumer started successfully');
   };
 
-  const stopConsumer = (id: string) => {
+  const stopConsumer = (name: string) => {
     setConsumers(prev => prev.map(consumer => 
-      consumer.id === id ? { 
+      consumer.name === name ? { 
         ...consumer, 
         status: 'stopped' as const,
         rate: 0 
@@ -241,9 +243,12 @@ export function ConsumersManagement({topics}) {
     toast.success('Consumer stopped successfully');
   };
 
-  const deleteConsumer = (id: string) => {
-    setConsumers(prev => prev.filter(consumer => consumer.id !== id));
-    toast.success('Consumer deleted successfully');
+  const deleteConsumer = async(name: string) => {
+    const [consumerResponse] = await Promise.all([
+        axios.delete(`${apiURL}/consumers/${name}`)
+      ]);
+      // setConsumedMessages(consumerResponse.data.consumers)    
+      toast.success('Consumer deleted successfully');
   };
 
   const getStatusColor = (status: string) => {
@@ -268,43 +273,40 @@ export function ConsumersManagement({topics}) {
   const totalMessagesConsumed = consumers.reduce((sum, c) => sum + c.messagesConsumed, 0);
   const totalGroups = new Set(consumers.map(c => c.groupId)).size;
 
+  const getConsumedMessages = async () => {
+    
+    const consumerRequest:ConsumerRequest = {
+      consumerName: selectedConsumerForMessages != "all" ? selectedConsumerForMessages : undefined,
+      topic: selectedTopicForMessages != "all" ? selectedTopicForMessages : undefined,
+      searchTerm: searchTerm? searchTerm: undefined,
+      limit: messagesPerPage,
+      offset: currentPage-1
+    };
+
+    console.log(consumerRequest);
+
+    try {
+      const [consumerResponse] = await Promise.all([
+        axios.post(`${apiURL}/consume`, consumerRequest)
+      ]);
+      console.log(consumerResponse.data)
+      setConsumedMessages(consumerResponse.data.messages)
+      setTotalPages(consumerResponse.data.totalCount)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Filter and paginate messages
-  const filteredMessages = useMemo(() => {
-    let filtered = consumedMessages;
-
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(msg => 
-        msg.value.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        msg.key.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // Filter by view mode
-    if (messageViewMode === 'topic') {
-      filtered = filtered.filter(msg => msg.topic === selectedTopicForMessages);
-    } else {
-      if (selectedConsumerForMessages !== 'all') {
-        filtered = filtered.filter(msg => msg.consumerId === selectedConsumerForMessages);
-      }
-    }
-
-    return filtered;
-  }, [consumedMessages, messageViewMode, selectedTopicForMessages, selectedConsumerForMessages, searchTerm]);
-
-  const paginatedMessages = useMemo(() => {
-    const start = (currentPage - 1) * messagesPerPage;
-    const end = start + messagesPerPage;
-    return filteredMessages.slice(start, end);
-  }, [filteredMessages, currentPage, messagesPerPage]);
-
-  const totalPages = Math.ceil(filteredMessages.length / messagesPerPage);
+  useEffect(() => {
+    getConsumedMessages();
+  }, [consumers, currentPage, messageViewMode, selectedTopicForMessages, selectedConsumerForMessages, searchTerm]);
 
   const updateConsumerConfig = () => {
     if (!editingConsumer) return;
 
     setConsumers(prev => prev.map(c => 
-      c.id === editingConsumer.id ? editingConsumer : c
+      c.name === editingConsumer.name ? editingConsumer : c
     ));
     setEditingConsumer(null);
     setIsEditingConfig(false);
@@ -319,7 +321,7 @@ export function ConsumersManagement({topics}) {
 
     // Simulate sending message via the selected consumer
     setConsumers(prev => prev.map(c => 
-      c.id === selectedConsumerForSending.id ? { ...c, messagesConsumed: c.messagesConsumed + 1 } : c
+      c.name === selectedConsumerForSending.name ? { ...c, messagesConsumed: c.messagesConsumed + 1 } : c
     ));
 
     setMessageToSend({ 
@@ -353,6 +355,21 @@ export function ConsumersManagement({topics}) {
       );
     }, 2000);
   };
+
+  const getConsumers = async () => {
+    try {
+      const [consumerResponse] = await Promise.all([
+        axios.get(`${apiURL}/consumers`)
+      ]);
+      setConsumers(consumerResponse.data)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    getConsumers();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -406,7 +423,7 @@ export function ConsumersManagement({topics}) {
                         <label key={topic.name} className="flex items-center space-x-2">
                           <input
                             type="checkbox"
-                            checked={newConsumer.topics.includes(topic)}
+                            checked={newConsumer.topics.includes(topic.name)}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setNewConsumer(prev => ({ 
@@ -530,7 +547,7 @@ export function ConsumersManagement({topics}) {
             </TableHeader>
             <TableBody>
               {consumers.map((consumer) => (
-                <TableRow key={consumer.id}>
+                <TableRow key={consumer.name}>
                   <TableCell className="font-medium">{consumer.name}</TableCell>
                   <TableCell>{consumer.groupId}</TableCell>
                   <TableCell>{consumer.topics.join(', ')}</TableCell>
@@ -552,7 +569,7 @@ export function ConsumersManagement({topics}) {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => stopConsumer(consumer.id)}
+                          onClick={() => stopConsumer(consumer.name)}
                         >
                           <Square className="w-3 h-3 mr-1" />
                           Stop
@@ -561,7 +578,7 @@ export function ConsumersManagement({topics}) {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => startConsumer(consumer.id)}
+                          onClick={() => startConsumer(consumer.name)}
                         >
                           <Play className="w-3 h-3 mr-1" />
                           Start
@@ -606,7 +623,7 @@ export function ConsumersManagement({topics}) {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteConsumer(consumer.id)}>
+                            <AlertDialogAction onClick={() => deleteConsumer(consumer.name)}>
                               Delete
                             </AlertDialogAction>
                           </AlertDialogFooter>
@@ -739,9 +756,9 @@ export function ConsumersManagement({topics}) {
             <div>
               <CardTitle>Consumed Messages</CardTitle>
               <CardDescription>
-                {filteredMessages.length.toLocaleString()} messages 
+                {consumedMessages.length.toLocaleString()} messages 
                 {messageViewMode === 'consumer' && selectedConsumerForMessages !== 'all' 
-                  ? ` from ${consumers.find(c => c.id === selectedConsumerForMessages)?.name || 'Unknown Consumer'}` 
+                  ? ` from ${consumers.find(c => c.name === selectedConsumerForMessages)?.name || 'Unknown Consumer'}` 
                   : ` from topic ${selectedTopicForMessages}`
                 }
               </CardDescription>
@@ -796,7 +813,7 @@ export function ConsumersManagement({topics}) {
                   <SelectContent>
                     <SelectItem value="all">All Consumers</SelectItem>
                     {consumers.map(consumer => (
-                      <SelectItem key={consumer.id} value={consumer.id}>{consumer.name}</SelectItem>
+                      <SelectItem key={consumer.name} value={consumer.name}>{consumer.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -807,7 +824,7 @@ export function ConsumersManagement({topics}) {
         <CardContent>
           <ScrollArea className="h-96">
             <div className="space-y-3">
-              {paginatedMessages.map((message, index) => (
+              {consumedMessages.map((message, index) => (
                 <div key={`${message.topic}-${message.offset}-${index}`} className="p-3 border rounded-lg bg-muted/30">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
@@ -878,7 +895,7 @@ export function ConsumersManagement({topics}) {
           )}
           
           <div className="mt-2 text-center text-sm text-muted-foreground">
-            Showing {((currentPage - 1) * messagesPerPage) + 1} - {Math.min(currentPage * messagesPerPage, filteredMessages.length)} of {filteredMessages.length.toLocaleString()} messages
+            Showing {((currentPage - 1) * messagesPerPage) + 1} - {Math.min(currentPage * messagesPerPage, consumedMessages.length)} of {consumedMessages.length.toLocaleString()} messages
           </div>
         </CardContent>
       </Card>
