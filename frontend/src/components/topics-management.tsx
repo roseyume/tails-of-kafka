@@ -28,8 +28,7 @@ interface Partition {
   offset: number;
 }
 
-export function TopicsManagement({topics, setTopics}) {
-  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+export function TopicsManagement({topics, setTopics, apiURL}) {
 
   const [newTopic, setNewTopic] = useState({
     name: '',

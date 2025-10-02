@@ -75,8 +75,7 @@ interface PartitionReassignment {
   status: 'pending' | 'completed' | 'failed';
 }
 
-export function ConsumersManagement({topics}) {
-  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+export function ConsumersManagement({topics, apiURL}) {
 
   const [consumers, setConsumers] = useState<Consumer[]>([
     {

@@ -45,19 +45,19 @@ export default function App() {
   const renderActiveSection = () => {
     switch (activeSection) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard apiURL={apiURL}/>;
       case 'cluster':
-        return <ClusterManagement />;
+        return <ClusterManagement apiURL={apiURL}/>;
       case 'topics':
-        return <TopicsManagement topics={topics} setTopics={setTopics} />;
+        return <TopicsManagement topics={topics} setTopics={setTopics} apiURL={apiURL}/>;
       case 'producers':
-        return <ProducersManagement topics={topics} />;
+        return <ProducersManagement topics={topics} apiURL={apiURL}/>;
       case 'consumers':
-        return <ConsumersManagement topics={topics}/>;
+        return <ConsumersManagement topics={topics} apiURL={apiURL}/>;
       case 'schema':
         return <SchemaRegistry />;
       default:
-        return <Dashboard />;
+        return <Dashboard apiURL={apiURL}/>;
     }
   };
 

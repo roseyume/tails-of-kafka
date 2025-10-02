@@ -5,9 +5,7 @@ import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Server, Database, Send, MessageSquare, Activity, Users } from 'lucide-react';
 
-export function Dashboard() {
-  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
-
+export function Dashboard({apiURL}) {
   const stats = [
     {
       title: 'Cluster Status',

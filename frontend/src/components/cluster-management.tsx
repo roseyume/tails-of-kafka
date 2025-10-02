@@ -22,8 +22,7 @@ interface Broker {
   num_partitions_as_follower: number;
 }
 
-export function ClusterManagement() {
-const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+export function ClusterManagement({apiURL}) {
 
   const [viewingConfigBrokerId, setViewingConfigBrokerId] = useState<number | null>(null);
 

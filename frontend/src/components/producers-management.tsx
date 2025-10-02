@@ -46,29 +46,9 @@ const catGossipMessages = [
   "Luna observed the neighbors getting a new cat carrier. Possible escape plan needed.",
 ]
 
-export function ProducersManagement({topics}) {
-  const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+export function ProducersManagement({topics, apiURL}) {
 
-  const [producers, setProducers] = useState<Producer[]>([
-    {
-      name: 'User Events Producer',
-      topic: 'user-events',
-      messagesSent: 1542,
-      batchSize: 100,
-      acks: 'all',
-      retries: 3,
-      compressionType: 'none',
-    },
-    {
-      name: 'Order Events Producer',
-      topic: 'order-events',
-      messagesSent: 893,
-      batchSize: 50,
-      acks: '1',
-      retries: 2,
-      compressionType: 'gzip',
-    },
-  ]);
+  const [producers, setProducers] = useState<Producer[]>([]);
 
   const [newProducer, setNewProducer] = useState({
     name: '',
