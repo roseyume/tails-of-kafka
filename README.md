@@ -31,6 +31,7 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    For the purpose of this workshop, a kafka dashboard application has been provisioned on top of the running Apache Kafka to make it easier to monitor and configure kafka instead of having to run different shell scripts. Note that this application is not full fledged and is only intended for learning purposes. The application, its parts and the apache kafka servers are spun up inside the Gitpod workspace through the docker-compose.yml file to serve the kafka dashboard that we will be running the workshop from.
 
    To start, navigate to: https://roseyume-tailsofkafka-ep8vt814m5c.ws-us121.gitpod.io/ 
+   On start up, copy the front end url (without the 'https://') to the allowsHosts field in your frontend/vite.config.ts file
 
 ---
 ## 👉 Scenario 1: Getting Started
