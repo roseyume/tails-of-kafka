@@ -69,19 +69,24 @@ class ProducerRequest(BaseModel):
     name: str
     topic: str
     message: str
-    partition: Optional[int] = 0   
+    partition: Optional[int] = 0  
+    
+class ClusterConfigRequest(BaseModel):
+    defaultReplicationFactor: int 
+    logRetentionHours: int 
+    minInsyncReplicas: int 
+    segmentSizeMb: int 
 
 class ConsumerConfigRequest(BaseModel):
     name: str       # human-readable name and unique internal key
     group_id: str
     topics: List[str]
-    enable_auto_commit: bool = True
-    auto_offset_reset: str = "latest"
-    max_poll_records: Optional[int] = 500
-    isolation_level: Optional[str] = "read_uncommitted"
-    fetch_min_bytes: Optional[int] = 1_000
-    offsets: Optional[Dict[str, int]] = None  # {topic: offset}
-
+    enableAutoCommit: bool = True
+    autoOffsetReset: str = "latest"
+    # max_poll_records: Optional[int] = 500
+    # isolation_level: Optional[str] = "read_uncommitted"
+    # fetch_min_bytes: Optional[int] = 1_000
+    
 class ProducerConfigRequest(BaseModel):
     name: str
     topic: str

@@ -32,6 +32,18 @@ services:
       ZOOKEEPER_INIT_LIMIT: 5
       ZOOKEEPER_SYNC_LIMIT: 2
     restart: unless-stopped
+  #  ================================== Postgres ========================================== #
+  pg-local:
+    image: postgres:15
+    container_name: pg-local
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: kafkadashboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
   #  ================================== Kafka ========================================== #
   #  latest: confluentinc/cp-server:7.3.3
   kafka-1:
@@ -146,4 +158,5 @@ services:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka-1:19092,kafka-2:19093,kafka-3:19094'
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081  
+
 

@@ -16,6 +16,8 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { MessageSquare, Plus, Trash2, Play, Square, Users, Eye, ArrowLeftRight, Filter, Search, Settings, Edit, Send } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
+const invisible = true
+
 interface Consumer {
   name: string;
   groupId: string;
@@ -32,7 +34,7 @@ interface ConsumerGroup {
   id: string;
   members: number;
   topics: string[];
-  state: 'stable' | 'rebalancing' | 'dead';
+  status: 'stable' | 'empty' | 'dead';
   lag: number;
 }
 
@@ -48,16 +50,18 @@ interface Message {
   key: string;
   value: string;
   partition: number;
-  offset: number;
+  message_offset: number;
   timestamp: string;
   topic: string;
-  consumerName?: string;
+  consumer_name?: string;
 }
 
 interface PartitionAssignment {
   partition: number;
   consumerName: string;
-  offset: number;
+  topic: string;
+  committedOffset: number;
+  latestOffset: number;
   lag: number;
 }
 
@@ -110,37 +114,10 @@ export function ConsumersManagement({topics}) {
     },
   ]);
 
-  const [consumerGroups] = useState<ConsumerGroup[]>([
-    {
-      id: 'user-analytics',
-      members: 2,
-      topics: ['user-events'],
-      state: 'stable',
-      lag: 45,
-    },
-    {
-      id: 'order-processing',
-      members: 1,
-      topics: ['order-events'],
-      state: 'stable',
-      lag: 12,
-    },
-    {
-      id: 'notifications',
-      members: 0,
-      topics: ['notifications'],
-      state: 'dead',
-      lag: 0,
-    },
-  ]);
+  const [consumerGroups, setConsumerGroups] = useState<ConsumerGroup[]>([]);
 
 
-  const [partitionAssignments] = useState<PartitionAssignment[]>([
-    { partition: 0, consumerName: 'cons-1', offset: 1542, lag: 15 },
-    { partition: 1, consumerName: 'cons-1', offset: 1541, lag: 8 },
-    { partition: 2, consumerName: 'cons-2', offset: 893, lag: 23 },
-    { partition: 0, consumerName: 'cons-2', offset: 445, lag: 12 },
-  ]);
+  const [partitionAssignments, setPartitionAssignments] = useState<PartitionAssignment[]>([]);
 
   const [partitionReassignments, setPartitionReassignments] = useState<PartitionReassignment[]>([
     {
@@ -160,6 +137,26 @@ export function ConsumersManagement({topics}) {
       toConsumer: 'cons-2',
       timestamp: '10:20:15',
       status: 'pending',
+    }
+    ,
+    {
+      id: 'rebalance-2',
+      topic: 'order-events',
+      partition: 0,
+      fromConsumer: 'cons-1',
+      toConsumer: 'cons-2',
+      timestamp: '10:20:15',
+      status: 'pending',
+    },
+  
+    {
+      id: 'rebalance-2',
+      topic: 'order-events',
+      partition: 0,
+      fromConsumer: 'cons-1',
+      toConsumer: 'cons-2',
+      timestamp: '10:20:15',
+      status: 'pending',
     },
   ]);
 
@@ -167,7 +164,7 @@ export function ConsumersManagement({topics}) {
     name: '',
     groupId: '',
     topics: [] as string[],
-    autoOffsetReset: 'latest' as const,
+    autoOffsetReset: 'earliest' as const,
     enableAutoCommit: true,
     autoCommitInterval: 5000,
   });
@@ -180,6 +177,7 @@ export function ConsumersManagement({topics}) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [totalPages, setTotalPages] = useState(0);
+  const [totalMessages, setTotalMessages] = useState(0);
   const [editingConsumer, setEditingConsumer] = useState<Consumer | null>(null);
   const [isEditingConfig, setIsEditingConfig] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -213,7 +211,7 @@ export function ConsumersManagement({topics}) {
       name: '',
       groupId: '',
       topics: [],
-      autoOffsetReset: 'latest',
+      autoOffsetReset: 'earliest',
       enableAutoCommit: true,
       autoCommitInterval: 5000,
     });
@@ -221,33 +219,27 @@ export function ConsumersManagement({topics}) {
     toast.success(`Consumer "${consumer.name}" created successfully`);
   };
 
-  const startConsumer = (name: string) => {
-    setConsumers(prev => prev.map(consumer => 
-      consumer.name === name ? { 
-        ...consumer, 
-        status: 'running' as const,
-        rate: Math.floor(Math.random() * 30) + 5 
-      } : consumer
-    ));
-    toast.success('Consumer started successfully');
+  const stopConsumer =async (name: string) => {
+    const [consumerResponse] = await Promise.all([
+        axios.get(`${apiURL}/consumers/stop/${name}`)
+      ]);
+    setConsumers(consumerResponse.data.consumers)    
+    toast.success('Consumer stopped successfully');
   };
 
-  const stopConsumer = (name: string) => {
-    setConsumers(prev => prev.map(consumer => 
-      consumer.name === name ? { 
-        ...consumer, 
-        status: 'stopped' as const,
-        rate: 0 
-      } : consumer
-    ));
-    toast.success('Consumer stopped successfully');
+  const startConsumer =async (name: string) => {
+    const [consumerResponse] = await Promise.all([
+        axios.get(`${apiURL}/consumers/resume/${name}`)
+      ]);
+    setConsumers(consumerResponse.data.consumers)    
+    toast.success('Consumer started successfully');
   };
 
   const deleteConsumer = async(name: string) => {
     const [consumerResponse] = await Promise.all([
         axios.delete(`${apiURL}/consumers/${name}`)
       ]);
-      // setConsumedMessages(consumerResponse.data.consumers)    
+      setConsumers(consumerResponse.data.consumers)    
       toast.success('Consumer deleted successfully');
   };
 
@@ -260,10 +252,10 @@ export function ConsumersManagement({topics}) {
     }
   };
 
-  const getGroupStateColor = (state: string) => {
-    switch (state) {
-      case 'stable': return 'bg-green-100 text-green-800';
-      case 'rebalancing': return 'bg-yellow-100 text-yellow-800';
+  const getGroupStatusColor = (status: string) => {
+    switch (status) {
+      case 'running': return 'bg-green-100 text-green-800';
+      case 'empty': return 'bg-yellow-100 text-yellow-800';
       case 'dead': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -275,23 +267,25 @@ export function ConsumersManagement({topics}) {
 
   const getConsumedMessages = async () => {
     
+    // console.log(selectedConsumerForMessages)
     const consumerRequest:ConsumerRequest = {
       consumerName: selectedConsumerForMessages != "all" ? selectedConsumerForMessages : undefined,
       topic: selectedTopicForMessages != "all" ? selectedTopicForMessages : undefined,
       searchTerm: searchTerm? searchTerm: undefined,
       limit: messagesPerPage,
-      offset: currentPage-1
+      offset: (currentPage - 1) * messagesPerPage
     };
 
-    console.log(consumerRequest);
+    // console.log(consumerRequest);
 
     try {
       const [consumerResponse] = await Promise.all([
         axios.post(`${apiURL}/consume`, consumerRequest)
       ]);
-      console.log(consumerResponse.data)
+      // console.log(consumerResponse.data)
       setConsumedMessages(consumerResponse.data.messages)
-      setTotalPages(consumerResponse.data.totalCount)
+      setTotalPages(Math.ceil(consumerResponse.data.totalCount/messagesPerPage))
+      setTotalMessages(consumerResponse.data.totalCount)
     } catch (err) {
       console.error(err);
     }
@@ -300,7 +294,7 @@ export function ConsumersManagement({topics}) {
   // Filter and paginate messages
   useEffect(() => {
     getConsumedMessages();
-  }, [consumers, currentPage, messageViewMode, selectedTopicForMessages, selectedConsumerForMessages, searchTerm]);
+  }, [consumers, currentPage, selectedTopicForMessages, selectedConsumerForMessages, searchTerm]);
 
   const updateConsumerConfig = () => {
     if (!editingConsumer) return;
@@ -367,9 +361,33 @@ export function ConsumersManagement({topics}) {
     }
   };
 
+  const getPartitionAssignments = async () => {
+    try {
+      const [partitionResponse] = await Promise.all([
+        axios.get(`${apiURL}/partitions`)
+      ]);
+      setPartitionAssignments(partitionResponse.data.assignedConsumers)
+      setConsumerGroups(partitionResponse.data.consumerGroups)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     getConsumers();
+    const interval = setInterval(() => {
+      getConsumedMessages();
+    }, 5000); // 5s
+    return () => clearInterval(interval); // cleanup
   }, []);
+
+  useEffect(() => {
+    if(consumers.length > 0){
+      const timerId = setTimeout(() => {
+        getPartitionAssignments();
+      }, 1000); // 1-second delay before getting partition assignments
+    }
+  }, [consumers]);
 
   return (
     <div className="space-y-6">
@@ -663,8 +681,8 @@ export function ConsumersManagement({topics}) {
                     <p className="text-sm font-medium">{group.lag}</p>
                     <p className="text-xs text-muted-foreground">lag</p>
                   </div>
-                  <Badge className={getGroupStateColor(group.state)}>
-                    {group.state}
+                  <Badge className={getGroupStatusColor(group.status)}>
+                    {group.status}
                   </Badge>
                 </div>
               </div>
@@ -674,7 +692,8 @@ export function ConsumersManagement({topics}) {
       </Card>
 
       {/* Partition Assignments and Reassignments */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"> */}
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -692,18 +711,22 @@ export function ConsumersManagement({topics}) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Partition</TableHead>
                   <TableHead>Consumer</TableHead>
-                  <TableHead>Offset</TableHead>
+                  <TableHead>Topic</TableHead>
+                  <TableHead>Partitions</TableHead>
+                  <TableHead>Committed Offset</TableHead>
+                  <TableHead>Latest Offset</TableHead>
                   <TableHead>Lag</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {partitionAssignments.map((assignment, index) => (
                   <TableRow key={index}>
-                    <TableCell>{assignment.partition}</TableCell>
                     <TableCell className="font-medium">{assignment.consumerName}</TableCell>
-                    <TableCell>{assignment.offset.toLocaleString()}</TableCell>
+                    <TableCell>{assignment.topic}</TableCell>
+                    <TableCell>{assignment.partition}</TableCell>
+                    <TableCell>{assignment.committedOffset.toLocaleString()}</TableCell>
+                    <TableCell>{assignment.latestOffset.toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge variant={assignment.lag > 20 ? "destructive" : "secondary"}>
                         {assignment.lag}
@@ -716,7 +739,7 @@ export function ConsumersManagement({topics}) {
           </CardContent>
         </Card>
 
-        <Card>
+        { false && (<Card>
           <CardHeader>
             <CardTitle>Partition Reassignments</CardTitle>
             <CardDescription>Recent partition reassignment activity</CardDescription>
@@ -746,7 +769,7 @@ export function ConsumersManagement({topics}) {
               ))}
             </div>
           </CardContent>
-        </Card>
+        </Card>)}
       </div>
 
       {/* Consumed Messages */}
@@ -756,11 +779,7 @@ export function ConsumersManagement({topics}) {
             <div>
               <CardTitle>Consumed Messages</CardTitle>
               <CardDescription>
-                {consumedMessages.length.toLocaleString()} messages 
-                {messageViewMode === 'consumer' && selectedConsumerForMessages !== 'all' 
-                  ? ` from ${consumers.find(c => c.name === selectedConsumerForMessages)?.name || 'Unknown Consumer'}` 
-                  : ` from topic ${selectedTopicForMessages}`
-                }
+                {totalMessages.toLocaleString()} total messages 
               </CardDescription>
             </div>
             <div className="flex items-center space-x-2">
@@ -825,23 +844,23 @@ export function ConsumersManagement({topics}) {
           <ScrollArea className="h-96">
             <div className="space-y-3">
               {consumedMessages.map((message, index) => (
-                <div key={`${message.topic}-${message.offset}-${index}`} className="p-3 border rounded-lg bg-muted/30">
+                <div key={`${message.topic}-${message.message_offset}-${index}`} className="p-3 border rounded-lg bg-muted/30">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
                       <Badge variant="outline">Topic: {message.topic}</Badge>
                       <Badge variant="outline">Partition {message.partition}</Badge>
-                      <Badge variant="outline">Offset {message.offset}</Badge>
+                      <Badge variant="outline">Offset {message.message_offset}</Badge>
                       {message.key && (
                         <Badge variant="outline">Key: {message.key}</Badge>
                       )}
-                      {message.consumerName && (
-                        <Badge variant="secondary">{message.consumerName}</Badge>
+                      {message.consumer_name && (
+                        <Badge variant="secondary">{message.consumer_name}</Badge>
                       )}
                     </div>
                     <span className="text-sm text-muted-foreground">{message.timestamp}</span>
                   </div>
                   <pre className="text-sm bg-background p-2 rounded border overflow-x-auto">
-                    {message.value}
+                    [{message.timestamp}] {message.value}
                   </pre>
                 </div>
               ))}
@@ -895,7 +914,7 @@ export function ConsumersManagement({topics}) {
           )}
           
           <div className="mt-2 text-center text-sm text-muted-foreground">
-            Showing {((currentPage - 1) * messagesPerPage) + 1} - {Math.min(currentPage * messagesPerPage, consumedMessages.length)} of {consumedMessages.length.toLocaleString()} messages
+            Showing {((currentPage - 1) * messagesPerPage) + 1} - {Math.min(currentPage * messagesPerPage, totalMessages)} of {totalMessages} messages
           </div>
         </CardContent>
       </Card>

@@ -29,24 +29,32 @@ ports:
   # Kafka Brokers, Zookeeper 
   - port: 2188
     onOpen: ignore
+    visibility: private
   - port: 9092
     onOpen: ignore
+    visibility: private
   - port: 9093
     onOpen: ignore
+    visibility: private
   - port: 9094
     onOpen: ignore
+    visibility: private
   - port: 2181
     onOpen: ignore
+    visibility: private
   - port: 9992
     onOpen: ignore
+    visibility: private
   - port: 9993
     onOpen: ignore
+    visibility: private
   - port: 9994
     onOpen: ignore
-
+    visibility: private
   # Kafka Schema Registry 
   - port: 8081
     onOpen: ignore
+    visibility: private
   # Fast Api
   - port: 8000
     visibility: public
@@ -58,6 +66,7 @@ ports:
   # Postgres Database
   - port: 5432
     onOpen: ignore
+    visibility: private
 
 
 

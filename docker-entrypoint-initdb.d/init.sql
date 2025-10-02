@@ -1,9 +1,3 @@
--- -- Create the database if not using POSTGRES_DB (optional)
--- CREATE DATABASE kafkadashboard;
-
--- -- Connect to the database if needed
--- \c kafkadashboard;
-
 -- Create messages table
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,

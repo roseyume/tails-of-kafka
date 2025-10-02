@@ -12,63 +12,111 @@ This beginner-friendly session uses a lighthearted pet gossip metaphor to teach 
 - What Apache Kafka is and why it matters
 - Core Kafka concepts: producers, topics, consumers, partitions, offsets
 - How to stream real-time events using Python and Kafka
-- How to process and filter messages with consumer groups
+- How to scale up with partitions and consumer groups
 
 ---
 
 ## 🐾 Metaphor Overview
 
-Think of Kafka like a neighborhood pet gossip system:
+In this workshop, think of Kafka like a neighborhood pet gossip system:
 
-- 🐶 Pets cause drama (producers)
+- 🐱 Cats watch and collect neighborhood updates (producers)
 - 🗂️ Gossip goes to categories like `YardDrama` or `KitchenCrimes` (topics)
-- 🐱 Cats watch and collect updates (consumers)
+- 🐶 Neighborhood animals read the gossip (consumers)
 - 🧠 Kafka organizes and remembers everything
 
 ---
 
 ## 🛠️ Kafka Setup
+   For the purpose of this workshop, a kafka dashboard application has been provisioned on top of the running Apache Kafka to make it easier to monitor and configure kafka instead of having to run different shell scripts. Note that this application is not full fledged and is only intended for learning purposes. The application, its parts and the apache kafka servers are spun up inside the Gitpod workspace through the docker-compose.yml file to serve the kafka dashboard that we will be running the workshop from.
 
-See [workshop/kafka-setup.md](workshop/kafka-setup.md) for local Kafka setup instructions using Docker.
-
----
-
-## ▶️ Run the Demo
-
-1. Start Kafka locally (see `kafka-setup.md`)
-2. In one terminal:  
-   `python3 workshop/producer.py`
-3. In another terminal:  
-   `python3 workshop/consumer.py`
+   To start, navigate to: 
 
 ---
+## 👉 Scenario 1: Getting Started
 
-## 🐕 Sample Gossip Message
+“Hey, Mittens. Did you see? There's a new cat next door” ~ Whiskers
 
-```json
-{
-  "pet": "Fluffy",
-  "event": "knocked over vase",
-  "location": "living room",
-  "timestamp": "2025-05-13T14:12:00Z"
-}
-```
+What Is a Topic in Kafka?
+A topic is a category or feed name to which records are sent. Producers write messages to topics, and consumers read from them.
 
-## 📦 Scenario 1: Scaling the Pet Gossip
+Objective: Understand the basic flow of producing messages in Kafka.
+
+- Create a topic 'NeighborhoodUpdates" with a partition of 1
+- Create a producer 'Whisker' configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
+
+## 📦 Scenario 2: Consume Your First Message
+
+What Is a Consumer in Kafka?
+A consumer reads messages from a topic. It can start from the earliest or latest message depending on the offset configuration. We'll get more into offset managment later.
+
+Objective: Learn how messages flow from the topic to a consumer.
+
+- Create a consumer 'Mittens' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'
+
+## 📦 Scenario 3: Late to the news!
+“Oh! Oh! Me too! I want to get the neighborhood gossip!” ~ Chase
+
+Objective: Learn how offset configurations can impact initial message consumption
+
+- Create another consumer 'Chase' configured for topic 'NeighborhoodUpdates in the consumer group 'dog-consumers' and auto offset reset 'latest'
+
+## 📦 Scenario 4: Scaling the Pet Gossip
 
 “Pet gossip has gone viral. One partition isn’t enough!”
 
 What Are Partitions in Kafka?
-In Kafka, a partition is a way to break up a topic into smaller chunks. Each topic (like PetGossip) can have one or more partitions, and each partition is an ordered, immutable sequence of messages.
+In Kafka, a partition is a way to break up a topic into smaller chunks. Each topic (like NeighborhoodUpdates) can have one or more partitions, and each partition is an ordered, immutable sequence of messages.
 Partitions are the foundation of Kafka’s scalability and parallelism.
+
+It's good to note that while topics might seem similar to message queues, they are actually logs where each message is appended to it.
 
 Objective: Partitioning enables parallelism, allowing you to produce and consume from multiple partitions simultaneously.
 
-- Modify the topic to use multiple partitions.
+- Recreate the topic 'NeighborhoodUpdates' with 5 partitions instead of 1
+- Create 2 producers configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
 
-Hint: Update or recreate the topic with --partitions 3+.
+## 📦 Scenario 5: Bad Server
+"There were bugs in the server so I helped take care of them 😊" ~ Whiskers
 
-## 👯‍♀️ Scenario 2: Consumer Group Chaos
+To ensure high availability and fault tolerance, Kafka uses replication. Each partition has:
+
+Leader: the broker responsible for handling all reads and writes for the partition. 
+
+Followers (Replicas): other brokers that replicate the leader’s data.
+
+When a leader broker fails, one of the in-sync followers (ISRs) can be automatically promoted to leader.
+
+🔑 Why Leader Replication Helps Guarantee Resiliency
+
+High Availability: If the leader broker crashes, the system automatically elects a follower as the new leader, ensuring the topic remains available.
+
+Durability: Messages are written to multiple brokers, protecting against data loss if one broker fails.
+
+Scalability with Safety: Producers and consumers always talk to the leader, but followers keep an up-to-date copy, balancing efficiency with reliability.
+
+Consistency: With the min.insync.replicas configuration, Kafka guarantees that writes are acknowledged by a certain number of replicas, reducing risk of data loss during failures.
+
+Objective: Understand how Kafka uses replication to continue processing without downtime.
+
+- Stop one of the brokers
+- Produce messages while the broker is offline and verify they are not lost
+
+**Hint:** Ensure a replication factor > 1 on the broker and `acks=all` on the producer.
+
+## 📦 Scenario 6: Topic Design
+
+"I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Mittens
+
+Separating data streams into topics helps organize messages and manage consumers efficiently.
+
+Objective: Learn topic categorization and multi-topic consumption.
+
+- Delete the 'NeighborhoodUpdates' topic and create 3 new ones 'YardDrama', 'IndoorCrimes' and 'ParkUpdates'.
+- Create producers to each and recreate the consumer 'Mittens'
+
+
+## 👯‍♀️ Scenario 7: Consumer Group Chaos
 
 “A group of squirrels are out to quickly find out which dog has been digging holes in the neighborhood park, using the cat's gossip boards. But they’re hearing duplicate stories!”
 
@@ -78,11 +126,10 @@ Each consumer in the group is assigned a subset of partitions from the topic, an
 
 Objective:
 
-- Group your consumers into a consumer group to evenly divide work.
+- Create 3 squirrel consumers to read the news across all the topics and group them into the same consumer group to evenly divide the work.
 
-Hint: Set the group.id in the consumer code.
 
-## 💥 Scenario 3: Missing out on the latest gossip!
+## 💥 Scenario 8: Missing out on the latest gossip!
 
 “Squirrel 3's listener crashed! That's so much gossip to go through again!”
 
@@ -110,35 +157,33 @@ Automatic commit (enable.auto.commit=true) commits offsets periodically without 
 
 Manual commit (enable.auto.commit=false) gives full control to commit offsets only after messages are safely processed, supporting more reliable processing at the cost of additional code complexity.
 
-Objective:
+Objective: Understand how offset management prevents data duplication and data loss
 
-- Restart a consumer and confirm it resumes from last committed offset.
+- Restart one of the squirrel consumers and confirm it resumes from last committed offset.
 
-Hint: Try enable.auto.commit=false and manual commits.
 
-## 💬 Scenario 4: Gossip Replay
+## 💬 Scenario 9: Gossip Replay (TODO)
 
 “No one's mentioned about the holes in the park today. Can we replay gossip from the beginning?”
 
 How can we replay messages?
 Kafka retains messages in a topic for a configurable amount of time (default: 7 days). During this time, any consumer can re-read those messages by:
 Resetting its offset to an earlier value (like 0 to go to the very beginning)
-Using the --from-beginning flag when running the Kafka console consumer
 This works because Kafka stores data in an immutable log, and consumers are free to choose their own read position (offset).
 
-Objective: Use --from-beginning on consumer to reprocess all messages.
+Objective: Understand Kafka's immutable log and replayability.
 
-Learning Goal: Understand Kafka's immutable log and replayability.
+- Use the seek command to specify where a new offset position for a specific topic for the consumer to restart from 
 
-## 🗃️ Scenario 5: Filter the Gossip
+## 🗃️ Scenario 10: Filter the Gossip (TODO)
 
 “The squirrels may have found their culprit. Let's see where else they've been.”
 
 Objective: Use message keys or metadata to filter messages on the consumer side to find additional evidence on the culprit.
 
-Bonus: Split gossip into multiple topics (e.g., DogGossip, CatGossip) and route accordingly.
+- Apply a filter to consume only messages matching specific keys or values.
 
-Learning Goal: Reinforce Kafka topic design and message filtering.
+Hint: Kafka Streams or custom consumer logic can be used.
 
 ## 🧶 Cat Gossip Central has brought justice to the squirrel community
 

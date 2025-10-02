@@ -6,9 +6,10 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
-import { Server, Play, Square, Trash2, Plus, Settings } from 'lucide-react';
+import { Server, Play, Square, Trash2, Plus, Settings, Eye } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 interface Broker {
@@ -23,6 +24,10 @@ interface Broker {
 
 export function ClusterManagement() {
 const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+
+  const [viewingConfigBrokerId, setViewingConfigBrokerId] = useState<number | null>(null);
+
+  const [brokerConfig, setBrokerConfig] = useState<{}>({});
 
   const [brokers, setBrokers] = useState<Broker[]>([
     { id: 1, host: 'localhost', port: 9092, status: 'running', role: 'controller' },
@@ -95,8 +100,22 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
     }
   };
 
+  const getBrokerConfig = async () => {
+    try {
+      const [brokerResponse] = await Promise.all([
+        axios.get(`${apiURL}/cluster`)
+      ]);
+      console.log(brokerResponse.data)
+      console.log(brokerResponse.data.brokers['1'])
+      setBrokerConfig(brokerResponse.data.brokers)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     getBrokers();
+    getBrokerConfig();
   }, []);
 
   return (
@@ -161,9 +180,9 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
                   <Badge className={getStatusColor(broker.status)}>
                     {broker.status}
                   </Badge>
-                  <Badge variant="outline" className={getRoleColor(broker.role)}>
+                  {/* <Badge variant="outline" className={getRoleColor(broker.role)}>
                     {broker.role}
-                  </Badge>
+                  </Badge> */}
                   
                   <div className="flex space-x-2">
                     {broker.status === 'running' ? (
@@ -184,8 +203,16 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
                         <Play className="w-4 h-4 mr-1" />
                         Start
                       </Button>
+                      
                     )}
-                    
+                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setViewingConfigBrokerId(broker.broker_id)}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      Config
+                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="outline" size="sm">
@@ -214,6 +241,43 @@ const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.i
           </div>
         </CardContent>
       </Card>
+
+      {/* Broker Configuration Dialog */}
+      <Dialog open={viewingConfigBrokerId !== null} onOpenChange={setViewingConfigBrokerId}>
+        <DialogContent className="max-w-6xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Broker {viewingConfigBrokerId} Configuration</DialogTitle>
+            <DialogDescription>
+              View the configuration properties for this broker. These settings control how the broker operates.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 -mx-6 px-6">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[30%]">Property</TableHead>
+                  <TableHead className="w-[25%]">Value</TableHead>
+                  <TableHead className="w-[45%]">Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {viewingConfigBrokerId !== null && Object.entries(brokerConfig[viewingConfigBrokerId]).map(([configName,config]) => (
+                  <TableRow key={configName}>
+                    <TableCell className="font-mono text-sm">{configName}</TableCell>
+                    <TableCell className="font-mono text-sm">{config.value}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{config.is_default}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="flex justify-end mt-4 pt-4 border-t">
+            <Button variant="outline" onClick={() => setViewingConfigBrokerId(null)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Cluster Configuration */}
       <Card>

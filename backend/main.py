@@ -1,7 +1,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic, ConfigResource
-from confluent_kafka import Consumer, Producer, TopicPartition, KafkaException, KafkaError
+from confluent_kafka import Consumer, Producer, TopicPartition, KafkaException, KafkaError, ConsumerGroupTopicPartitions
 from fastapi import FastAPI, HTTPException
 from backend.models.schemas import *
 from backend.database.init import database
@@ -16,7 +16,7 @@ import time
 import threading, queue
 import random
 import asyncio
-from sqlalchemy import func
+from sqlalchemy import func, select, delete
 
 # ----------------------------
 # Configure root logger
@@ -33,9 +33,8 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup():
-    logger.info("Before")
     await database.connect()
-    logger.info("After")
+    # asyncio.create_task(db_writer())
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -44,6 +43,7 @@ async def shutdown():
         consumer_threads[consumer_name].join()     # wait for thread to finish
         consumers[consumer_name].close()
         print(f"Consumer {consumer_name} stopped gracefully")
+    await database.execute(str("TRUNCATE TABLE messages RESTART IDENTITY"))
     await database.disconnect()
 
 # Allow your React app to call this backend
@@ -89,7 +89,8 @@ app.add_middleware(
 logger.info("This will always appear if flush is enabled by default")
 
 # Kafka Admin client
-admin = AdminClient({"bootstrap.servers": "localhost:9092"})
+BOOTSTRAP_SERVERS = "localhost:9092"
+admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
 
 # Consumers
 consumers: Dict[str, Consumer] = {}
@@ -102,7 +103,95 @@ producers: Dict[str, Producer] = {}
 producer_metadata: Dict[str, ProducerInfo] = {}
 
 # -------------------------------
-# Admin endpoints
+# Cluster endpoints
+# -------------------------------
+@app.get("/cluster")
+async def get_cluster_configs():
+    try:
+        # --- Get cluster metadata to discover brokers ---
+        metadata = admin.list_topics(timeout=10)
+        # Collect broker IDs from replicas (alive + dead)
+        broker_ids = set()
+        for topic in metadata.topics.values():
+            for partition in topic.partitions.values():
+                broker_ids.update(partition.replicas)
+        logger.info("Broker ids")
+        logger.info(broker_ids)
+
+        if not broker_ids:
+            raise HTTPException(status_code=500, detail="No brokers found in cluster")
+
+        # --- TODO: Fix this so it accurately gives the global configs ---
+        cluster_resource = ConfigResource("BROKER", "1")
+        cluster_future = admin.describe_configs([cluster_resource])
+
+        global_configs = {}
+        try:
+            cluster_result = cluster_future[cluster_resource].result()
+            for name, entry in cluster_result.items():
+                global_configs[name] = {
+                    "value": entry.value,
+                    "is_default": entry.is_default,
+                    "is_read_only": entry.is_read_only,
+                    "is_sensitive": entry.is_sensitive,
+                    "source": str(entry.source),
+                }
+        except Exception as e:
+            global_configs["error"] = str(e)
+
+        # --- Get per-broker configs (loop each broker) ---
+        broker_configs = {}
+        for broker_id in broker_ids:
+            res = ConfigResource("BROKER", str(broker_id))
+            future = admin.describe_configs([res])
+
+            configs = {}
+            try:
+                result = future[res].result()
+                for name, entry in result.items():
+                    configs[name] = {
+                        "value": entry.value,
+                        "is_default": entry.is_default,
+                        "is_read_only": entry.is_read_only,
+                    }
+            except Exception as e:
+                configs["error"] = str(e)
+
+            broker_configs[broker_id] = configs
+
+        return {
+            "bootstrap_servers": BOOTSTRAP_SERVERS,
+            "global_configs": global_configs,  # from broker 0
+            "brokers": broker_configs,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch cluster configs: {e}")
+
+@app.post("/cluster/update")
+async def update_cluster_config(req: ClusterConfigRequest):
+    try:
+        config = {
+            "default.replication.factor": req.defaultReplicationFactor,
+            "log.retention.hours": req.logRetentionHours,
+            "min.insync.replicas": req.minInsyncReplicas,
+            "segment.bytes": req.segmentSizeMb
+        }
+        # Apply configs to the cluster (broker resource type = BROKER = 4)
+        # Passing `broker_id=0` means "apply to the default broker config for all brokers"
+        resource = ConfigResource("BROKER", "0", config)
+        futures = admin.alter_configs([resource])
+
+        # Wait for completion
+        for r, f in futures.items():
+            f.result()  # raises exception on failure
+
+        return {"success": True, "updated": new_config}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update cluster config: {str(e)}")
+# -------------------------------
+# Broker endpoints
 # -------------------------------
 @app.get("/brokers", response_model=List[Broker])
 async def get_brokers():
@@ -401,10 +490,85 @@ def add_partitions(req: PartitionsRequest):
             return {"success": False, "error": str(e)}
 
 @app.get("/partitions")
-def list_partitions():
-    metadata = admin.list_topics(timeout=10)
-    partitions = sum(len(topic.partitions) for topic in metadata.topics.values())
-    return {"partition_count": partitions}
+async def list_partitions():
+    try:
+        groups = admin.list_consumer_groups(request_timeout=10).result()
+        group_ids = [group.group_id for group in groups.valid]
+        group_descriptions = admin.describe_consumer_groups(group_ids, request_timeout = 10)
+        assigned = []
+        unassigned = []
+        consumer_groups = []
+
+        for group_id in group_ids:
+            curr_assigned = []
+            # Get committed offsets for group
+            group = group_descriptions[group_id].result()
+            group_spec = ConsumerGroupTopicPartitions(group_id, None) 
+            group_offsets = admin.list_consumer_group_offsets([group_spec])[group_id].result()
+
+            # Get all topics this group is consuming
+            topics = list({topic_partition.topic for topic_partition in group_offsets.topic_partitions})
+            topic_meta = admin.list_topics(timeout=10).topics
+            group_members = group.members
+
+            for member in group_members:
+                consumer_name = member.client_id
+                assignment = member.assignment  # list of TopicPartitions
+                assigned_topics = {tp.topic for tp in assignment.topic_partitions}
+
+                # Check each assigned partition
+                for tp in assignment.topic_partitions:
+                    committed = None
+                    for offset_tp in group_offsets.topic_partitions:
+                        if offset_tp.topic == tp.topic and offset_tp.partition == tp.partition:
+                            committed = offset_tp.offset
+                            break
+
+                    if consumer_name in consumers:
+                        latest = consumers[consumer_name].get_watermark_offsets(tp)[1]
+                        lag = latest - committed if committed is not None and committed >= 0 else None
+                    else:
+                        latest = None
+                        lag = None
+
+                    assigned_partition = {
+                        "consumerName": consumer_name,
+                        "consumerGroup": group_id,
+                        "topic": tp.topic,
+                        "partition": tp.partition,
+                        "committedOffset": committed,
+                        "latestOffset": latest,
+                        "lag": lag
+                    }
+                    curr_assigned.append(assigned_partition)
+                    assigned.append(assigned_partition)
+
+                # Detect unassigned topics for this consumer
+                for topic in topics:
+                    if topic not in assigned_topics:
+                        unassigned.append({
+                            "groupId": group_id,
+                            "consumer": consumer_name,
+                            "unassignedTopic": topic
+                        })
+
+            consumer_groups.append({
+                "id": group_id,
+                "members": len([member.client_id for member in group_members]),
+                "topics": topics,
+                "lag": sum([a['lag'] for a in curr_assigned]),
+                "status": 'empty' if len([member.client_id for member in group_members]) == 0 else 'running'
+
+            })
+
+        return {
+            "assignedConsumers": assigned,
+            "unassignedConsumers": unassigned,
+            "consumerGroups": consumer_groups
+        }
+
+    except KafkaException as e:
+        return {"error": str(e)}
 
 # -------------------------------
 # Consumers
@@ -420,6 +584,7 @@ async def create_consumer(req: ConsumerInfo):
 
     # Kafka consumer configuration
     conf = {
+        "client.id" : req.name,
         "bootstrap.servers": "localhost:9092",  # default, could be extended to frontend
         "group.id": req.groupId,
         "auto.offset.reset": req.autoOffsetReset,
@@ -436,8 +601,6 @@ async def create_consumer(req: ConsumerInfo):
             low, high = kafka_consumer.get_watermark_offsets(TopicPartition(req.topics[0], partition_id))
             messages_in_partition = high - low
             total_messages += messages_in_partition
-        logger.info("Messages found")
-        logger.info(total_messages)
     except KafkaException as e:
         raise HTTPException(status_code=500, detail=f"Failed to create consumer: {e}")
 
@@ -468,37 +631,23 @@ async def create_consumer(req: ConsumerInfo):
     }
 
 @app.put("/consumers/{consumer_name}")
-def update_consumer(consumer_name: str, req: ConsumerConfigRequest):
-    if consumer_name not in consumers:
-        print("Consumer " + str(consumer_name) + " found")
-    else:
-        # Close existing consumer safely
-        consumer_stop_events[consumer_name].set()  # signal to stop
-        consumer_threads[consumer_name].join()     # wait for thread to finish
-        consumers[consumer_name].close()
+async def update_consumer(consumer_name: str, req: ConsumerConfigRequest):
+    if consumer_name in consumers: 
+        stop_consumer(consumer_name)
     
     # Re-create consumer with new config
-    consumer_config = {
-        "bootstrap.servers": "localhost:9092",
-        "group.id": req.group_id,
-        "enable.auto.commit": req.enable_auto_commit,
-        "auto.offset.reset": req.auto_offset_reset,
-        "max.poll.records": req.max_poll_records,
-        "isolation.level": req.isolation_level,
-        "fetch.min.bytes": req.fetch_min_bytes
-    }
-    
-    consumer = Consumer(consumer_config)
-    
-    if req.offsets:
-        assignments = [TopicPartition(topic, 0, offset) for topic, offset in req.offsets.items()]
-        consumer.assign(assignments)
-    else:
-        consumer.subscribe(req.topics)
-    
-    consumers[consumer_name] = consumer
-    consumer_metadata[req.name] = ConsumerInfo(
-        name=req.name,
+    # conf = {
+    #     "bootstrap.servers": "localhost:9092",
+    #     "group.id": req.group_id,
+    #     "enable.auto.commit": req.enable_auto_commit,
+    #     "auto.offset.reset": req.auto_offset_reset,
+    #     # "max.poll.records": req.max_poll_records,
+    #     # "isolation.level": req.isolation_level,
+    #     # "fetch.min.bytes": req.fetch_min_bytes
+    # }
+
+    consumerInfo = ConsumerInfo(
+        name=consumer_name,
         groupId=req.groupId,
         topics=req.topics,
         status='running',
@@ -507,31 +656,65 @@ def update_consumer(consumer_name: str, req: ConsumerConfigRequest):
         enableAutoCommit=req.enableAutoCommit,
         autoCommitInterval=req.autoCommitInterval
     )
+    
+    # if req.offsets:
+    #     assignments = [TopicPartition(topic, 0, offset) for topic, offset in req.offsets.items()]
+    #     consumer.assign(assignments)
+    # else:
+    #     consumer.subscribe(req.topics)
+    
+    try:
+        result = await create_consumer(consumer_metadata[consumer_name])
+        return {"success": True, "message": f"Consumer {consumer_name} updated", "consumers": result['consumers']}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete consumer: {str(e)}")
 
-    return {
-        "success": True,
-        "consumer_name": consumer_name,
-        "group_id": req.group_id,
-        "topics": req.topics,
-        "manual_offsets": req.offsets is not None,
-        "consumers": get_consumers()
-    }
 
-@app.delete("/consumers/{consumer_name}")
-def delete_consumer(consumer_name: str):
+@app.get("/consumers/resume/{consumer_name}")
+async def resume_consumer(consumer_name: str):
+    if consumer_name not in consumer_metadata:
+        raise HTTPException(status_code=404, detail="Consumer not found")
+
+    try:
+        result = await create_consumer(consumer_metadata[consumer_name])
+        return {"success": True, "message": f"Consumer {consumer_name} started", "consumers": result['consumers']}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete consumer: {str(e)}")
+
+
+@app.get("/consumers/stop/{consumer_name}")
+def stop_consumer(consumer_name: str):
     if consumer_name not in consumers:
         raise HTTPException(status_code=404, detail="Consumer not found")
 
     try:
         consumer_stop_events[consumer_name].set()  # signal to stop
-        consumer_threads[consumer_name].join()     # wait for thread to finish           
-        print(f"Consumer {consumer_name} stopped gracefully")
-        
-        # Remove from dictionaries
         del consumer_stop_events[consumer_name]
+        consumer_threads[consumer_name].join()     # wait for thread to finish  
         del consumer_threads[consumer_name]
         consumer = consumers.pop(consumer_name)   # remove from active consumers
+        consumer.close()       
+        consumer_metadata[consumer_name].status = 'stopped' 
+        logger.info("Consumer {consumer_name} stopped gracefully")
+
+        return {"success": True, "message": f"Consumer {consumer_name} deleted", "consumers": get_consumers()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete consumer: {str(e)}")
+
+
+@app.delete("/consumers/{consumer_name}")
+async def delete_consumer(consumer_name: str):
+    if consumer_name not in consumer_metadata:
+        raise HTTPException(status_code=404, detail="Consumer not found")
+
+    try:
+        if consumer_name in consumers:
+            stop_consumer(consumer_name)
+
+        # Remove from dictionaries
         consumer_metadata.pop(consumer_name, None)  # clean up metadata if present
+        query = delete(messages).where(messages.c.consumer_name == consumer_name)
+        result = await database.execute(query)
 
         return {"success": True, "message": f"Consumer {consumer_name} deleted", "consumers": get_consumers()}
     except Exception as e:
@@ -542,13 +725,11 @@ def delete_consumer(consumer_name: str):
 # -------------------------------
 @app.post("/consume")
 async def get_consumer_messages(req: ConsumerRequest):
-    logger.info(req.consumerName)
-    logger.info(consumers)
-    if req.consumerName and req.consumerName not in consumers:
+    if req.consumerName and req.consumerName not in consumer_metadata:
         raise HTTPException(status_code=404, detail="Consumer not found")
     
     query = messages.select()
-    count_query = messages.select().with_only_columns(func.count())
+    count_query = select(func.count()).select_from(messages)
 
 
     # Filter by consumer name
@@ -560,10 +741,11 @@ async def get_consumer_messages(req: ConsumerRequest):
     if req.topic:
         query = query.where(messages.c.topic == req.topic)
         count_query = count_query.where(messages.c.topic == req.topic)
+    
     # Filter by searchTerm
     if req.searchTerm:
-        query = query.where(messages.c.value.ilike(f"%{searchTerm}%"))
-        count_query = count_query.where(messages.c.value.ilike(f"%{searchTerm}%"))
+        query = query.where(messages.c.value.ilike(f"%{req.searchTerm}%"))
+        count_query = count_query.where(messages.c.value.ilike(f"%{req.searchTerm}%"))
 
     # Order newest first by timestamp
     query = query.order_by(messages.c.timestamp.desc())
