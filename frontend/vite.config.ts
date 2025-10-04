@@ -56,6 +56,6 @@
     server: {
       port: 3000,
       open: true,
-      allowedHosts: ['3000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io']
+      allowedHosts: [new URL(process.env.FRONTEND_URL!).hostname],
     },
   });

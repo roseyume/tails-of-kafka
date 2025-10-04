@@ -20,7 +20,7 @@ const navigation = [
   { name: 'Schema Registry', icon: Settings, id: 'schema' },
 ];
 
-const apiURL = "https://8000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io";
+const apiURL = import.meta.env.VITE_API_BASE_URL;
 
 
 export default function App() {

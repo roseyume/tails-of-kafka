@@ -5,10 +5,9 @@ tasks:
       export PUBLIC_IP=127.0.0.1
       echo "Downloading libraries..."
       pip install -r requirements.txt
-      npm install axios react-bootstrap bootstrap vite react react-dom lucide-react sonner@2.0.3 recharts \
-      @radix-ui/react-{accordion,alert-dialog,aspect-ratio,avatar,checkbox,collapsible,context-menu,dialog,dropdown-menu,hover-card,label,menubar,navigation-menu,popover,progress,radio-group,scroll-area,select,separator,slider,slot,switch,tabs,toast,toggle,toggle-group,tooltip} \
-      embla-carousel-react react-hook-form@7.55.0 @hookform/resolvers zod vaul react-day-picker date-fns \
-      input-otp class-variance-authority clsx tailwind-merge
+      cd frontend
+      npm install
+      cd ..
     command: |
       echo "Starting images..."
       docker-compose up -d
@@ -16,13 +15,16 @@ tasks:
       echo "Waiting for PostgreSQL to initialize..."
       sleep 10
 
-      echo "Starting kafka dashboard..."
-      cd frontend
-      sleep 10 && npm run dev &   # background React
-
       cd ..
       echo "Starting fast api..."
       uvicorn backend.main:app --reload --port 8000 --host 0.0.0.0
+
+      export FRONTEND_URL=$(gp url 3001)
+      echo "VITE_API_BASE_URL=$(gp url 8000)" > frontend/.env.development
+
+      echo "Starting kafka dashboard..."
+      cd frontend
+      sleep 10 && npm run dev &   # background React
   
 env:
   KAFKAJS_NO_PARTITIONER_WARNING: "1"
