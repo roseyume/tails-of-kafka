@@ -28,10 +28,11 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 ---
 
 ## 🛠️ Kafka Setup
-   For the purpose of this workshop, a kafka dashboard application has been provisioned on top of the running Apache Kafka to make it easier to monitor and configure kafka instead of having to run different shell scripts. Note that this application is not full fledged and is only intended for learning purposes. The application, its parts and the apache kafka servers are spun up inside the Gitpod workspace through the docker-compose.yml file to serve the kafka dashboard that we will be running the workshop from.
+   For the purpose of this workshop, a kafka dashboard application has been provisioned on top of the running Apache Kafka to help explore how parts of kafka are configured together for different scenarios. Note that this application is not full fledged and is only intended for learning purposes. The application, its parts and the apache kafka servers are spun up inside the Gitpod workspace through the docker-compose.yml file to serve the kafka dashboard that we will be running the workshop from.
 
-   To start, navigate to: https://roseyume-tailsofkafka-ep8vt814m5c.ws-us121.gitpod.io/ 
-   On start up, copy the front end url (without the 'https://') to the allowsHosts field in your frontend/vite.config.ts file
+   Prerequisite: a github account is needed and can create created at: https://github.com/
+   
+   To start, navigate to: https://roseyume-tailsofkafka-ep8vt814m5c.ws-us121.gitpod.io/ and login with your github account
 
 ---
 ## 👉 Scenario 1: Getting Started
@@ -44,7 +45,7 @@ A topic is a category or feed name to which records are sent. Producers write me
 Objective: Understand the basic flow of producing messages in Kafka.
 
 - Create a topic 'NeighborhoodUpdates" with a partition of 1
-- Create a producer 'Whisker' configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
+- Create a producer 'Whiskers' configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
 
 ## 📦 Scenario 2: Consume Your First Message
 

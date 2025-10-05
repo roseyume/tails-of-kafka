@@ -16,9 +16,8 @@ tasks:
       sleep 10
 
       echo "Starting fast api..."
-      uvicorn backend.main:app --reload --port 8000 --host 0.0.0.0
+      uvicorn backend.main:app --reload --port 8000 --host 0.0.0.0 &
 
-      export FRONTEND_URL=$(gp url 3001)
       echo "VITE_API_BASE_URL=$(gp url 8000)" > frontend/.env.development
 
       echo "Starting kafka dashboard..."
