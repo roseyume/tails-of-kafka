@@ -272,7 +272,10 @@ export function TopicsManagement({topics, setTopics, apiURL}) {
                       
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" disabled={['__consumer_offsets', '_schemas'].includes(topic.name)} // disable if value is empty
+                            className={`p-1 rounded hover:bg-red-100 transition-colors ${
+                              ['__consumer_offsets', '_schemas'].includes(topic.name) ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </AlertDialogTrigger>

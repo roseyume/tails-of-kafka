@@ -56,6 +56,6 @@
     server: {
       port: 3000,
       open: true,
-      allowedHosts: [new URL(process.env.FRONTEND_URL!).hostname],
+      allowedHosts: ['localhost', '127.0.0.1','.gitpod.io']
     },
   });

@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
-import { Server, Play, Square, Trash2, Plus, Settings, Eye } from 'lucide-react';
+import { Server, Play, Square, Trash2, Plus, Settings, Eye, Copy, Check, Info  } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { toast } from 'sonner@2.0.3';
+import { CONFIG_DESCRIPTIONS } from './configurations';
 
 interface Broker {
   broker_id: number;
@@ -28,13 +30,11 @@ export function ClusterManagement({apiURL}) {
 
   const [brokerConfig, setBrokerConfig] = useState<{}>({});
 
-  const [brokers, setBrokers] = useState<Broker[]>([
-    { id: 1, host: 'localhost', port: 9092, status: 'running', role: 'controller' },
-    { id: 2, host: 'localhost', port: 9093, status: 'running', role: 'follower' },
-    { id: 3, host: 'localhost', port: 9094, status: 'stopped', role: 'follower' },
-  ]);
+  const [brokers, setBrokers] = useState<Broker[]>([]);
 
   const [isAddingBroker, setIsAddingBroker] = useState(false);
+
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const startBroker = async (id: number) => {
     const [brokerResponse] = await Promise.all([
@@ -85,6 +85,13 @@ export function ClusterManagement({apiURL}) {
     return role === 'controller' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800';
   };
 
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    toast.success('Copied to clipboard');
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
   const runningBrokers = brokers.filter(b => b.status === 'running').length;
 
   
@@ -104,8 +111,6 @@ export function ClusterManagement({apiURL}) {
       const [brokerResponse] = await Promise.all([
         axios.get(`${apiURL}/cluster`)
       ]);
-      console.log(brokerResponse.data)
-      console.log(brokerResponse.data.brokers['1'])
       setBrokerConfig(brokerResponse.data.brokers)
     } catch (err) {
       console.error(err);
@@ -242,33 +247,73 @@ export function ClusterManagement({apiURL}) {
       </Card>
 
       {/* Broker Configuration Dialog */}
-      <Dialog open={viewingConfigBrokerId !== null} onOpenChange={setViewingConfigBrokerId}>
-        <DialogContent className="max-w-6xl max-h-[85vh] flex flex-col">
+      <Dialog open={viewingConfigBrokerId !== null} onOpenChange={() => setViewingConfigBrokerId(null)}>
+        <DialogContent className="!max-w-[90vw] sm:!max-w-[90vw] max-h-[85vh] flex flex-col" style={{
+          maxWidth: '80%',
+          maxHeight: 'calc(var(--vh, 1vh) * 100 - 4rem)',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
           <DialogHeader>
             <DialogTitle>Broker {viewingConfigBrokerId} Configuration</DialogTitle>
             <DialogDescription>
-              View the configuration properties for this broker. These settings control how the broker operates.
+              View the configuration properties for this broker. Click values to copy to clipboard. Hover over the info icon for descriptions.
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-y-auto flex-1 -mx-6 px-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[30%]">Property</TableHead>
-                  <TableHead className="w-[25%]">Value</TableHead>
-                  <TableHead className="w-[45%]">Description</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {viewingConfigBrokerId !== null && Object.entries(brokerConfig[viewingConfigBrokerId]).map(([configName,config]) => (
-                  <TableRow key={configName}>
-                    <TableCell className="font-mono text-sm">{configName}</TableCell>
-                    <TableCell className="font-mono text-sm">{config.value}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{config.is_default}</TableCell>
+            <TooltipProvider>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40%]">Property</TableHead>
+                    <TableHead className="w-[60%]">Value</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {viewingConfigBrokerId !== null && Object.entries(brokerConfig[viewingConfigBrokerId]).map(([configName,config]) => (
+                    <TableRow key={configName}>
+                      <TableCell className="font-mono text-sm align-top">
+                        <div className="flex items-start gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="w-4 h-4 text-muted-foreground hover:text-foreground cursor-help flex-shrink-0 mt-0.5" />
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="max-w-sm">
+                              <p>{CONFIG_DESCRIPTIONS[configName]}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <span className="break-all flex-1">{configName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm align-top">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => copyToClipboard(config.value, configName)}
+                              className="text-left w-full break-all hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 transition-colors group flex items-start gap-2"
+                            >
+                              <span className="flex-1 whitespace-pre-wrap text-left">
+                                {config.value?.split(',').map((part, i, arr) => (
+                                  <React.Fragment key={i}>
+                                    {part.trim()}
+                                    {i < arr.length - 1 && <><br /></>}
+                                  </React.Fragment>
+                                ))}
+                              </span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="max-w-xs break-all">Click to copy: {configName}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
           </div>
           <div className="flex justify-end mt-4 pt-4 border-t">
             <Button variant="outline" onClick={() => setViewingConfigBrokerId(null)}>

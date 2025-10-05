@@ -10,14 +10,15 @@ import { ProducersManagement } from './components/producers-management';
 import { ConsumersManagement } from './components/consumers-management';
 import { SchemaRegistry } from './components/schema-registry';
 import { Dashboard } from './components/dashboard';
+import { Toaster } from './components/ui/sonner';
 
 const navigation = [
-  { name: 'Dashboard', icon: Activity, id: 'dashboard' },
+  // { name: 'Dashboard', icon: Activity, id: 'dashboard' },
   { name: 'Cluster', icon: Server, id: 'cluster' },
   { name: 'Topics', icon: Database, id: 'topics' },
   { name: 'Producers', icon: Send, id: 'producers' },
   { name: 'Consumers', icon: MessageSquare, id: 'consumers' },
-  { name: 'Schema Registry', icon: Settings, id: 'schema' },
+  // { name: 'Schema Registry', icon: Settings, id: 'schema' },
 ];
 
 const apiURL = import.meta.env.VITE_API_BASE_URL;
@@ -62,59 +63,62 @@ export default function App() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full">
-        <Sidebar>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                    <Server className="w-4 h-4 text-primary-foreground" />
+    <>
+      <Toaster position="top-right" /> 
+      <SidebarProvider>
+        <div className="flex h-screen w-full">
+          <Sidebar>
+            <SidebarContent>
+              <SidebarGroup>
+                <SidebarGroupLabel>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                      <Server className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                    Kafka Workshop
                   </div>
-                  Kafka Workshop
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {navigation.map((item) => (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          onClick={() => setActiveSection(item.id)}
+                          isActive={activeSection === item.id}
+                        >
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.name}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
+          
+          <main className="flex-1 overflow-auto">
+            <div className="container mx-auto p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <SidebarTrigger />
+                <div>
+                  <h1 className="text-3xl font-bold">Kafka Learning Dashboard</h1>
+                  <p className="text-muted-foreground">
+                    Learn Apache Kafka through hands-on practice
+                  </p>
                 </div>
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {navigation.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        onClick={() => setActiveSection(item.id)}
-                        isActive={activeSection === item.id}
-                      >
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.name}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-        </Sidebar>
-        
-        <main className="flex-1 overflow-auto">
-          <div className="container mx-auto p-6">
-            <div className="flex items-center gap-4 mb-6">
-              <SidebarTrigger />
-              <div>
-                <h1 className="text-3xl font-bold">Kafka Learning Dashboard</h1>
-                <p className="text-muted-foreground">
-                  Learn Apache Kafka through hands-on practice
-                </p>
+                <div className="ml-auto">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    Connected
+                  </Badge>
+                </div>
               </div>
-              <div className="ml-auto">
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
-                  Connected
-                </Badge>
-              </div>
+              
+              {renderActiveSection()}
             </div>
-            
-            {renderActiveSection()}
-          </div>
-        </main>
-      </div>
-    </SidebarProvider>
+          </main>
+        </div>
+      </SidebarProvider>
+    </>
   );
 }

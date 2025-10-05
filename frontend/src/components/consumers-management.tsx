@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './ui/pagination';
 import { MessageSquare, Plus, Trash2, Play, Square, Users, Eye, ArrowLeftRight, Filter, Search, Settings, Edit, Send } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 const invisible = true
 
@@ -174,7 +174,7 @@ export function ConsumersManagement({topics, apiURL}) {
   const [selectedConsumerForMessages, setSelectedConsumerForMessages] = useState<string>('all');
   const [messageViewMode, setMessageViewMode] = useState<'topic' | 'consumer'>('topic');
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTermForMessages, setSearchTermForMessages] = useState('');
   const [totalPages, setTotalPages] = useState(0);
   const [totalMessages, setTotalMessages] = useState(0);
   const [editingConsumer, setEditingConsumer] = useState<Consumer | null>(null);
@@ -264,24 +264,20 @@ export function ConsumersManagement({topics, apiURL}) {
   const totalMessagesConsumed = consumers.reduce((sum, c) => sum + c.messagesConsumed, 0);
   const totalGroups = new Set(consumers.map(c => c.groupId)).size;
 
-  const getConsumedMessages = async () => {
-    
-    // console.log(selectedConsumerForMessages)
+  const getConsumedMessages = async (selectedConsumer, selectedTopic, searchTerm) => {
     const consumerRequest:ConsumerRequest = {
-      consumerName: selectedConsumerForMessages != "all" ? selectedConsumerForMessages : undefined,
-      topic: selectedTopicForMessages != "all" ? selectedTopicForMessages : undefined,
+      consumerName: selectedConsumer != "all" ? selectedConsumer : undefined,
+      topic: selectedTopic != "all" ? selectedTopic : undefined,
       searchTerm: searchTerm? searchTerm: undefined,
       limit: messagesPerPage,
       offset: (currentPage - 1) * messagesPerPage
     };
 
-    // console.log(consumerRequest);
-
     try {
       const [consumerResponse] = await Promise.all([
         axios.post(`${apiURL}/consume`, consumerRequest)
       ]);
-      // console.log(consumerResponse.data)
+
       setConsumedMessages(consumerResponse.data.messages)
       setTotalPages(Math.ceil(consumerResponse.data.totalCount/messagesPerPage))
       setTotalMessages(consumerResponse.data.totalCount)
@@ -289,11 +285,6 @@ export function ConsumersManagement({topics, apiURL}) {
       console.error(err);
     }
   };
-
-  // Filter and paginate messages
-  useEffect(() => {
-    getConsumedMessages();
-  }, [consumers, currentPage, selectedTopicForMessages, selectedConsumerForMessages, searchTerm]);
 
   const updateConsumerConfig = () => {
     if (!editingConsumer) return;
@@ -372,10 +363,31 @@ export function ConsumersManagement({topics, apiURL}) {
     }
   };
 
+  const selectedConsumerRef = useRef(selectedConsumerForMessages);
+
+  useEffect(() => {
+    selectedConsumerRef.current = selectedConsumerForMessages;
+  }, [selectedConsumerForMessages]);
+
+  const selectedTopicRef = useRef(selectedTopicForMessages);
+  useEffect(() => {
+    selectedTopicRef.current = selectedTopicForMessages;
+  }, [selectedTopicForMessages]);
+
+  const searchTermRef = useRef(searchTermForMessages);
+  useEffect(() => {
+    searchTermRef.current = searchTermForMessages;
+  }, [searchTermForMessages]);
+
+  useEffect(() => {
+    getConsumedMessages(selectedConsumerForMessages, selectedTopicForMessages, searchTermForMessages);
+  }, [consumers, currentPage, selectedTopicForMessages, selectedConsumerForMessages, searchTermForMessages]);
+
+
   useEffect(() => {
     getConsumers();
-    const interval = setInterval(() => {
-      getConsumedMessages();
+    const interval = setInterval(async () => {
+        getConsumedMessages(selectedConsumerRef.current, selectedTopicRef.current, searchTermRef.current); 
     }, 5000); // 5s
     return () => clearInterval(interval); // cleanup
   }, []);
@@ -521,7 +533,7 @@ export function ConsumersManagement({topics, apiURL}) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="space-y-2">
               <p className="text-sm font-medium">Total Consumers</p>
               <p className="text-2xl font-bold">{consumers.length}</p>
@@ -533,10 +545,6 @@ export function ConsumersManagement({topics, apiURL}) {
             <div className="space-y-2">
               <p className="text-sm font-medium">Consumer Groups</p>
               <p className="text-2xl font-bold">{totalGroups}</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Messages Consumed</p>
-              <p className="text-2xl font-bold">{totalMessagesConsumed.toLocaleString()}</p>
             </div>
           </div>
         </CardContent>
@@ -556,8 +564,6 @@ export function ConsumersManagement({topics, apiURL}) {
                 <TableHead>Group</TableHead>
                 <TableHead>Topics</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Messages Consumed</TableHead>
-                <TableHead>Rate (msg/s)</TableHead>
                 <TableHead>Configuration</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -573,8 +579,6 @@ export function ConsumersManagement({topics, apiURL}) {
                       {consumer.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{consumer.messagesConsumed.toLocaleString()}</TableCell>
-                  <TableCell>{consumer.rate}</TableCell>
                   <TableCell>
                     <div className="text-sm text-muted-foreground">
                       Offset: {consumer.autoOffsetReset}, Auto-commit: {consumer.enableAutoCommit ? 'On' : 'Off'}
@@ -662,7 +666,7 @@ export function ConsumersManagement({topics, apiURL}) {
           <CardDescription>Monitor consumer group status and lag</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {consumerGroups.map((group) => (
               <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="space-y-1">
@@ -786,15 +790,15 @@ export function ConsumersManagement({topics, apiURL}) {
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search messages..."
-                  value={searchTerm}
+                  value={searchTermForMessages}
                   onChange={(e) => {
-                    setSearchTerm(e.target.value);
+                    setSearchTermForMessages(e.target.value);
                     setCurrentPage(1);
                   }}
                   className="pl-8 w-48"
                 />
               </div>
-              <Select value={messageViewMode} onValueChange={(value: any) => {
+              {/* <Select value={messageViewMode} onValueChange={(value: any) => {
                 setMessageViewMode(value);
                 setCurrentPage(1);
               }}>
@@ -805,27 +809,26 @@ export function ConsumersManagement({topics, apiURL}) {
                   <SelectItem value="topic">By Topic</SelectItem>
                   <SelectItem value="consumer">By Consumer</SelectItem>
                 </SelectContent>
-              </Select>
-              {messageViewMode === 'topic' ? (
+              </Select> */}
                 <Select value={selectedTopicForMessages} onValueChange={(value) => {
                   setSelectedTopicForMessages(value);
                   setCurrentPage(1);
                 }}>
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-56">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all">All Topics</SelectItem>
                     {topics.map(topic => (
                       <SelectItem key={topic.name} value={topic.name}>{topic.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              ) : (
                 <Select value={selectedConsumerForMessages} onValueChange={(value) => {
                   setSelectedConsumerForMessages(value);
                   setCurrentPage(1);
                 }}>
-                  <SelectTrigger className="w-64">
+                  <SelectTrigger className="w-56">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -835,7 +838,6 @@ export function ConsumersManagement({topics, apiURL}) {
                     ))}
                   </SelectContent>
                 </Select>
-              )}
             </div>
           </div>
         </CardHeader>
