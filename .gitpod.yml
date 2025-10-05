@@ -15,7 +15,6 @@ tasks:
       echo "Waiting for PostgreSQL to initialize..."
       sleep 10
 
-      cd ..
       echo "Starting fast api..."
       uvicorn backend.main:app --reload --port 8000 --host 0.0.0.0
 
