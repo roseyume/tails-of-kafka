@@ -3,10 +3,10 @@ from pydantic import BaseModel
 from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic, ConfigResource
 from confluent_kafka import Consumer, Producer, TopicPartition, KafkaException, KafkaError, ConsumerGroupTopicPartitions
 from fastapi import FastAPI, HTTPException
-from backend.models.schemas import *
-from backend.database.init import database
-from backend.database.tables import messages
-from backend.kafka_consumer import consume_single_consumer
+from models.schemas import *
+from database.init import database
+from database.tables import messages
+from kafka_consumer import consume_single_consumer
 import logging
 import yaml
 import subprocess
@@ -115,8 +115,6 @@ async def get_cluster_configs():
         for topic in metadata.topics.values():
             for partition in topic.partitions.values():
                 broker_ids.update(partition.replicas)
-        logger.info("Broker ids")
-        logger.info(broker_ids)
 
         if not broker_ids:
             raise HTTPException(status_code=500, detail="No brokers found in cluster")
@@ -195,7 +193,6 @@ async def update_cluster_config(req: ClusterConfigRequest):
 # -------------------------------
 @app.get("/brokers", response_model=List[Broker])
 async def get_brokers():
-    logger.info("Fetching Kafka cluster metadata...")
     try:
         metadata = admin.list_topics(timeout=5)
         nodes = []
@@ -353,11 +350,11 @@ async def create_broker():
         print(e)
 
 
-def run_compose_command(service_name: str, command: str):
+def run_compose_command(*args):
     """Run docker-compose command on the given service."""
     try:
         subprocess.run(
-            ["docker-compose", "-f", DOCKER_COMPOSE_FILE, command, service_name],
+            ["docker-compose", "-f", DOCKER_COMPOSE_FILE, *args],
             check=True
         )
     except subprocess.CalledProcessError as e:
@@ -369,7 +366,7 @@ async def stop_broker(broker_id: int):
     service_name = find_service_name(broker_id)
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
-    run_compose_command(service_name, "stop")
+    run_compose_command("stop", service_name)
     time.sleep(1)
     return {"status": "stopped", "service_name": service_name, "broker": await get_brokers()}
 
@@ -379,7 +376,7 @@ async def restart_broker(broker_id: int):
     service_name = find_service_name(broker_id)
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
-    run_compose_command(service_name, "restart")
+    run_compose_command("restart", service_name)
     time.sleep(1)
     return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
 
@@ -391,10 +388,9 @@ async def delete_broker(broker_id: int):
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
 
     # Stop the container first
-    run_compose_command(service_name, "stop")
-
+    run_compose_command("stop", service_name)
     # Remove the container
-    run_compose_command(service_name, "rm -f")
+    run_compose_command("rm", "-f", service_name)
 
     # Optionally: remove the service from docker-compose.yml
     with open(DOCKER_COMPOSE_FILE, "r") as f:
@@ -811,13 +807,10 @@ def create_producer(req: ProducerConfigRequest):
 
 @app.post("/producers")
 def update_producer(req: ProducerConfigRequest):
-    logger.info(producers)
-    logger.info(producer_metadata)
     if req.name in producers:
         # Flush and discard old producer
         producers[req.name].flush()
 
-    logger.info(req)
     producer = Producer({
         "bootstrap.servers": "localhost:9092",
         "acks": req.acks,
@@ -867,7 +860,6 @@ def produce_message(req: ProducerRequest):
 
 @app.delete("/producers/{name}")
 def delete_producer(name: str):
-    logger.info(producers)
     if name not in producers:
         raise HTTPException(
             status_code=404,
@@ -917,8 +909,6 @@ def send_cat_gossip(name: str, topic: str, duration: int):
 
 @app.post("/producers/cat-gossip/{name}")
 def start_cat_gossip(name: str, req: GossipRequest):
-    logger.info(producers)
-    logger.info(producer_metadata)
     if name not in producers:
         raise HTTPException(status_code=404, detail="Producer not found")
 

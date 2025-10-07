@@ -25,7 +25,7 @@ const apiURL = import.meta.env.VITE_API_BASE_URL;
 
 
 export default function App() {
-  const [activeSection, setActiveSection] = useState('dashboard');
+  const [activeSection, setActiveSection] = useState('cluster');
   const [topics, setTopics] = useState<string[]>([]);
 
   const getTopics = async () => {
@@ -45,8 +45,8 @@ export default function App() {
 
   const renderActiveSection = () => {
     switch (activeSection) {
-      case 'dashboard':
-        return <Dashboard apiURL={apiURL}/>;
+      // case 'dashboard':
+      //   return <Dashboard apiURL={apiURL}/>;
       case 'cluster':
         return <ClusterManagement apiURL={apiURL}/>;
       case 'topics':
@@ -58,7 +58,8 @@ export default function App() {
       case 'schema':
         return <SchemaRegistry />;
       default:
-        return <Dashboard apiURL={apiURL}/>;
+        return <ClusterManagement apiURL={apiURL}/>;
+        // return <Dashboard apiURL={apiURL}/>;
     }
   };
 

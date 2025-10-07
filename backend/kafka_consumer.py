@@ -1,8 +1,8 @@
 import time, threading, asyncio
 from datetime import datetime
 from confluent_kafka import Consumer
-from backend.database.init import database
-from backend.database.tables import messages
+from database.init import database
+from database.tables import messages
 # from queue import Queue
 
 # Shared stop flag

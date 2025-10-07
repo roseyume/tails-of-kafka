@@ -132,10 +132,31 @@ export function ClusterManagement({apiURL}) {
               <CardTitle>Cluster Overview</CardTitle>
               <CardDescription>Manage your Kafka cluster brokers</CardDescription>
             </div>
-            <Button onClick={createBroker}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Broker
-            </Button>
+            <Dialog open={isAddingBroker} onOpenChange={setIsAddingBroker}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Broker
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Broker</DialogTitle>
+                  <DialogDescription>
+                    This will register a new broker in your Kafka cluster using the default configuration.
+No additional setup is required. Please confirm to proceed.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="flex justify-end space-x-2">
+                    <Button variant="outline" onClick={() => setIsAddingBroker(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={createBroker}>Add Broker</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </CardHeader>
         <CardContent>
@@ -215,7 +236,6 @@ export function ClusterManagement({apiURL}) {
                       onClick={() => setViewingConfigBrokerId(broker.broker_id)}
                     >
                       <Eye className="w-4 h-4 mr-1" />
-                      Config
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>

@@ -1,5 +1,5 @@
 from sqlalchemy import Table, Column, Integer, String, BigInteger, TIMESTAMP
-from backend.database.init import metadata
+from database.init import metadata
 
 messages = Table(
     "messages",
