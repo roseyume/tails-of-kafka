@@ -37,7 +37,7 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 ---
 ## 👉 Scenario 1: Getting Started
 
-“Hey, Mittens. Did you see? There's a new cat next door” ~ Whiskers
+“Hey, Pixie. Did you see? There's a new cat next door” ~ Whiskers
 
 What Is a Topic in Kafka?
 A topic is a category or feed name to which records are sent. Producers write messages to topics, and consumers read from them.
@@ -54,14 +54,14 @@ A consumer reads messages from a topic. It can start from the earliest or latest
 
 Objective: Learn how messages flow from the topic to a consumer.
 
-- Create a consumer 'Mittens' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'
+- Create a consumer 'Pixie' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'
 
 ## 📦 Scenario 3: Late to the news!
-“Oh! Oh! Me too! I want to get the neighborhood gossip!” ~ Chase
+“Oh! Oh! Me too! I want to get the neighborhood gossip!” ~ Sammy
 
 Objective: Learn how offset configurations can impact initial message consumption
 
-- Create another consumer 'Chase' configured for topic 'NeighborhoodUpdates in the consumer group 'dog-consumers' and auto offset reset 'latest'
+- Create another consumer 'Sammy' configured for topic 'NeighborhoodUpdates in the consumer group 'dog-consumers' and auto offset reset 'latest'
 
 ## 📦 Scenario 4: Scaling the Pet Gossip
 
@@ -108,14 +108,14 @@ Objective: Understand how Kafka uses replication to continue processing without 
 
 ## 📦 Scenario 6: Topic Design
 
-"I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Mittens
+"I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Pixie
 
 Separating data streams into topics helps organize messages and manage consumers efficiently.
 
 Objective: Learn topic categorization and multi-topic consumption.
 
 - Delete the 'NeighborhoodUpdates' topic and create 3 new ones 'YardDrama', 'IndoorCrimes' and 'ParkUpdates'.
-- Create producers to each and recreate the consumer 'Mittens'
+- Create producers to each and recreate the consumer 'Pixie'
 
 
 ## 👯‍♀️ Scenario 7: Consumer Group Chaos
