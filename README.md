@@ -34,6 +34,9 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    
    To start, navigate to: https://roseyume-tailsofkafka-ep8vt814m5c.ws-us121.gitpod.io/ and login with your github account
 
+   <img width="932" height="476" alt="image" src="https://github.com/user-attachments/assets/e81d38f9-efd4-48d2-8571-7421d4852bf9" />
+
+
 ---
 ## 👉 Scenario 1: Getting Started
 
