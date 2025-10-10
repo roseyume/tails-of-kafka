@@ -13,16 +13,7 @@ import { Server, Play, Square, Trash2, Plus, Settings, Eye, Copy, Check, Info  }
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { toast } from 'sonner@2.0.3';
 import { CONFIG_DESCRIPTIONS } from './configurations';
-
-interface Broker {
-  broker_id: number;
-  hostname: string;
-  port: number;
-  role: 'controller' | 'follower';
-  status: 'running' | 'stopped' | 'error';
-  num_partitions_as_leader: number;
-  num_partitions_as_follower: number;
-}
+import { Broker } from '@/types';
 
 export function ClusterManagement({apiURL}) {
 
@@ -83,6 +74,10 @@ export function ClusterManagement({apiURL}) {
 
   //TODO: Need to resolve scenario: removed broker is still assigned as replicas. Force partition reassignment?
   const removeBroker = async (id: number) => {
+    if(!updateBrokerState(id, 'removing')){
+      return;
+    }
+
     const [brokerResponse] = await Promise.all([
       axios.delete(`${apiURL}/brokers/delete/${id}`)
     ]);
@@ -374,7 +369,7 @@ No additional setup is required. Please confirm to proceed.
       </Dialog>
 
       {/* Cluster Configuration */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Cluster Configuration</CardTitle>
           <CardDescription>Global cluster settings and properties</CardDescription>
@@ -431,7 +426,7 @@ No additional setup is required. Please confirm to proceed.
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 }

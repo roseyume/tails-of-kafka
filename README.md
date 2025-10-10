@@ -55,21 +55,23 @@ Objective: Understand the basic flow of producing messages in Kafka.
 - Create a topic 'NeighborhoodUpdates" with a partition of 1
 - Create a producer 'Buddy' configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
 
-Check your work:
+# ✅ Check Your Work
  - In the "Topic Management" section of the dashboard, your newly created topic should appear.
  - The "Producer Management" area should display your producer, and the number of messages sent should be greater than 0
 
 ## 📦 Scenario 2: Consume Your First Message
 
 What Is a Consumer in Kafka?
-A consumer reads messages from a topic. It can start from the earliest or latest message depending on the offset configuration. We'll get more into offset managment later.
+A consumer reads messages from a topic. It can start from the earliest or latest message depending on the offset configuration. 
+
+In Kafka, offsets are crucial for tracking a consumer’s position within a partition. Each message in a Kafka partition is assigned a unique sequential number called an offset. The offset indicates the consumer’s progress by marking which messages have been read.
 
 Objective: Learn how messages flow from the topic to a consumer.
 
-- Create a consumer 'Pixie' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'
+- Create a consumer 'Pixie' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'. 
 
-Check your work:
- - The "Consumers Messages" panel should show incoming messages.
+# ✅ Check Your Work
+ - The "Consumed Messages" panel should show all the messages produced to the topic 'NeighborhoodUpdates. 
 
 ## 📦 Scenario 3: Late to the news!
 “Oh! Oh! Me too! I want to get the neighborhood gossip!” ~ Sammy
@@ -78,8 +80,8 @@ Objective: Learn how offset configurations can impact initial message consumptio
 
 - Create another consumer 'Sammy' configured for topic 'NeighborhoodUpdates in the consumer group 'dog-consumers' and auto offset reset 'latest'
 
-Check your work:
- - In the "Consumers Messages" view, you should notice that Sammy missed all previous messages that were sent.
+# ✅ Check Your Work
+ - In the "Consumed Messages" table, you should notice that Sammy missed previous messages that were sent.
 
 ## 📦 Scenario 4: Scaling the Pet Gossip
 
@@ -89,12 +91,17 @@ What Are Partitions in Kafka?
 In Kafka, a partition is a way to break up a topic into smaller chunks. Each topic (like NeighborhoodUpdates) can have one or more partitions, and each partition is an ordered, immutable sequence of messages.
 Partitions are the foundation of Kafka’s scalability and parallelism.
 
-It's good to note that while topics might seem similar to message queues, they are actually logs where each message is appended to it.
+It's good to note that while topics might seem similar to message queues, topics are actually logs where each message is appended to it.
 
 Objective: Partitioning enables parallelism, allowing you to produce and consume from multiple partitions simultaneously.
 
+- Delete the consumers 'Sammy' and 'Pixie' and the producer 'Buddy'
 - Recreate the topic 'NeighborhoodUpdates' with 6 partitions instead of 1
 - Create 2 producers configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
+- Recreate the consumer 'Pixie'
+
+# ✅ Check Your Work
+ - In the "Partition Assignments" table, you should notice that Pixie has been assigned to all 6 partitions. 
 
 ## 📦 Scenario 5: Bad Server
 "There were bugs in the server so I helped take care of them 😊" ~ Buddy
@@ -102,7 +109,6 @@ Objective: Partitioning enables parallelism, allowing you to produce and consume
 To ensure high availability and fault tolerance, Kafka uses replication. Each partition has:
 
 Leader: the broker responsible for handling all reads and writes for the partition. 
-
 Followers (Replicas): other brokers that replicate the leader’s data.
 
 When a leader broker fails, one of the in-sync followers (ISRs) can be automatically promoted to leader.
@@ -135,7 +141,6 @@ Objective: Learn topic categorization and multi-topic consumption.
 - Delete the 'NeighborhoodUpdates' topic and create 3 new ones 'YardDrama', 'IndoorCrimes' and 'ParkUpdates'.
 - Create producers to each and recreate the consumer 'Pixie'
 
-
 ## 👯‍♀️ Scenario 7: Consumer Group Chaos
 
 “A group of squirrels are out to quickly find out which dog has been digging holes in the neighborhood park, using the cat's gossip boards. But they’re hearing duplicate stories!”
@@ -153,12 +158,9 @@ Objective:
 
 “Squirrel 3's listener crashed! That's so much gossip to go through again!”
 
-Offset Management and Recovery in Kafka Consumers
-In Kafka, offsets are crucial for tracking a consumer’s position within a partition. Each message in a Kafka partition is assigned a unique sequential number called an offset. The offset indicates the consumer’s progress by marking which messages have been read.
-
 How Offset Management Works
-When a consumer reads messages from a partition, it keeps track of the offset of the last message it successfully processed.
-This offset can be committed back to Kafka (usually to a special internal topic called \_\_consumer_offsets) so that Kafka knows up to which message the consumer has processed.
+When a consumer reads messages from a partition, it replies to kafka with an acknowledge.
+This offset can then be committed back to Kafka (usually to a special internal topic called \_\_consumer_offsets) so that Kafka knows up to which message the consumer has processed.
 Committing offsets can happen automatically (auto-commit) at regular intervals or manually by the consumer application after processing a message batch.
 
 Why is Offset Management Important?
@@ -180,30 +182,6 @@ Manual commit (enable.auto.commit=false) gives full control to commit offsets on
 Objective: Understand how offset management prevents data duplication and data loss
 
 - Restart one of the squirrel consumers and confirm it resumes from last committed offset.
-
-
-## 💬 Scenario 9: Gossip Replay (TODO)
-
-“No one's mentioned about the holes in the park today. Can we replay gossip from the beginning?”
-
-How can we replay messages?
-Kafka retains messages in a topic for a configurable amount of time (default: 7 days). During this time, any consumer can re-read those messages by:
-Resetting its offset to an earlier value (like 0 to go to the very beginning)
-This works because Kafka stores data in an immutable log, and consumers are free to choose their own read position (offset).
-
-Objective: Understand Kafka's immutable log and replayability.
-
-- Use the seek command to specify where a new offset position for a specific topic for the consumer to restart from 
-
-## 🗃️ Scenario 10: Filter the Gossip (TODO)
-
-“The squirrels may have found their culprit. Let's see where else they've been.”
-
-Objective: Use message keys or metadata to filter messages on the consumer side to find additional evidence on the culprit.
-
-- Apply a filter to consume only messages matching specific keys or values.
-
-Hint: Kafka Streams or custom consumer logic can be used.
 
 ## 🧶 Cat Gossip Central has brought justice to the squirrel community
 

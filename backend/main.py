@@ -139,6 +139,7 @@ async def get_cluster_configs():
 
         # --- Get per-broker configs (loop each broker) ---
         broker_configs = {}
+
         for broker_id in broker_ids:
             res = ConfigResource("BROKER", str(broker_id))
             future = admin.describe_configs([res])
@@ -193,62 +194,54 @@ async def update_cluster_config(req: ClusterConfigRequest):
 # -------------------------------
 @app.get("/brokers", response_model=List[Broker])
 async def get_brokers():
-    logger.info(BOOTSTRAP_SERVERS)
     try:
         metadata = admin.list_topics(timeout=5)
         nodes = []
         controller_id = metadata.controller_id
 
-        # Collect broker IDs from replicas (alive + dead)
-        replica_brokers = set()
-        for topic in metadata.topics.values():
-            for partition in topic.partitions.values():
-                replica_brokers.update(partition.replicas)
-
         # Live brokers (from metadata)
         live_brokers = set(metadata.brokers.keys())
-
+    
+        # Build broker node info (live + dead)
         # Initialize broker stats for all brokers (live + dead)
         broker_stats = {broker_id: {"leader_count": 0, "follower_count": 0}
-                        for broker_id in replica_brokers}
+                        for broker_id in live_brokers}
 
         # Count leader/follower partitions per broker
         for topic in metadata.topics.values():
-            for partition in topic.partitions.values():
+
+            for partition_id, partition in topic.partitions.items():
                 leader_id = partition.leader
                 replicas = partition.replicas
-                for broker_id in replicas:
-                    if broker_id == leader_id:
-                        broker_stats[broker_id]["leader_count"] += 1
-                    else:
-                        broker_stats[broker_id]["follower_count"] += 1
+                if replicas:
+                    for broker_id in replicas:
+                        if broker_id == leader_id:
+                            broker_stats[broker_id]["leader_count"] += 1
+                        else:
+                            if(broker_stats.get(broker_id)):
+                                broker_stats[broker_id]["follower_count"] += 1
+                            else:
+                                broker_stats.setdefault(broker_id, {"leader_count": 0, "follower_count": 0})
+                                broker_stats[broker_id]["follower_count"] += 1
 
-        # Build broker node info (live + dead)
-        for broker_id in replica_brokers:
-            if broker_id in live_brokers:
-                broker = metadata.brokers[broker_id]
-                node = Broker(
-                    broker_id=broker_id,
-                    hostname=broker.host,
-                    port=broker.port,
-                    status="running",
-                    role="controller" if broker_id == controller_id else "follower",
-                    num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
-                    num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
-                )
-            else:
-                # Dead broker (no metadata.host/port available)
-                node = Broker(
-                    broker_id=broker_id,
-                    hostname="unknown",
-                    port=0,
-                    status="stopped",
-                    role="unknown",
-                    num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
-                    num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
-                )
+        for broker_id in live_brokers:
+            broker = metadata.brokers[broker_id]
+            node = Broker(
+                broker_id=broker_id,
+                hostname=broker.host,
+                port=broker.port,
+                status="running",
+                role="controller" if broker_id == controller_id else "follower",
+                num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
+                num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
+            )
             nodes.append(node)
-
+        
+        stopped_broker = get_stopped_brokers()
+        
+        for broker in stopped_broker:
+            if broker.broker_id not in live_brokers:
+                nodes.append(broker)
         return nodes
 
     except Exception as e:
@@ -387,6 +380,13 @@ async def create_broker():
     except Exception as e:
         print(e)
 
+# Continuously read stdout and stderr
+async def read_stream(stream, name):
+    while True:
+        line = await stream.readline()
+        if not line:
+            break
+        print(f"[{name}] {line.decode().rstrip()}")
 
 async def run_compose_command(*args):
     """Run docker-compose command on the given service."""
@@ -399,20 +399,34 @@ async def run_compose_command(*args):
             stderr=asyncio.subprocess.PIPE
         )
 
-        stdout, stderr = await process.communicate()
 
-        if process.returncode != 0:
-            raise RuntimeError(
-                f"docker-compose failed with code {process.returncode}: {stderr.decode()}"
-            )
+        await asyncio.gather(
+            read_stream(process.stdout, "stdout"),
+            read_stream(process.stderr, "stderr")
+        )
 
-        time.sleep(1)
-
+        return_code = await process.wait()
+        print(f"Process exited with code {return_code}", flush=True)
+        return return_code
     except Exception as e:
         print(f"Error running docker-compose: {e}")
         raise
 
-    return stdout.decode().strip()
+    #     stdout, stderr = await process.communicate()
+
+
+    #     if process.returncode != 0:
+    #         raise RuntimeError(
+    #             f"docker-compose failed with code {process.returncode}: {stderr.decode()}"
+    #         )
+
+    #     time.sleep(5)
+
+    # except Exception as e:
+    #     print(f"Error running docker-compose: {e}")
+    #     raise
+
+    # return stdout.decode().strip()
 
 @app.post("/brokers/stop/{broker_id}")
 async def stop_broker(broker_id: int):
@@ -441,9 +455,9 @@ async def delete_broker(broker_id: int):
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
 
     # Stop the container first
-    run_compose_command("stop", service_name)
+    await run_compose_command("stop", service_name)
     # Remove the container
-    run_compose_command("rm", "-f", service_name)
+    await run_compose_command("rm", "-f", service_name)
 
     # Optionally: remove the service from docker-compose.yml
     with open(DOCKER_COMPOSE_FILE, "r") as f:
@@ -527,7 +541,51 @@ def create_topic(req: TopicRequest):
             return {"success": True, "topic": topic_name}
         except Exception as e:
             return {"success": False, "error": str(e)}
-            
+
+def topic_has_active_consumers(topic_name: str) -> bool:
+    """Return True if any consumer group is actively consuming from the topic."""
+    groups = admin.list_consumer_groups(request_timeout=10).result()
+    group_ids = [group.group_id for group in groups.valid]
+    if len(group_ids) == 0:
+        return False
+
+    group_metadata = admin.describe_consumer_groups(group_ids, request_timeout=10)
+    for group_id, meta in group_metadata.items():
+        try:
+            group_desc = meta.result()
+            for member in group_desc.members:
+                assignment = member.assignment
+                if topic_name in assignment.topic_partitions:
+                    return True
+        except Exception:
+            continue
+    return False
+
+@app.delete("/topics/{topic_name}")
+async def delete_topic(topic_name: str):
+    """Delete a Kafka topic after checking for active consumers."""
+    try:
+        metadata = admin.list_topics(timeout=10)
+  
+        if not (topic_name in metadata.topics.keys()):
+            return list_topics()
+
+        if topic_has_active_consumers(topic_name):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Topic '{topic_name}' has active consumers. Stop them before deleting.",
+            )
+
+        futures = admin.delete_topics([topic_name])
+        futures[topic_name].result()
+
+        return list_topics()
+
+    except KafkaException as e:
+        raise HTTPException(status_code=500, detail=f"Kafka error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/partitions")
 def add_partitions(req: PartitionsRequest):
     fs = admin.create_partitions({req.name: NewPartitions(total_count=req.additional_partitions)}, request_timeout=15)
@@ -540,14 +598,21 @@ def add_partitions(req: PartitionsRequest):
 
 @app.get("/partitions")
 async def list_partitions():
+    assigned = []
+    unassigned = []
+    consumer_groups = []
     try:
         groups = admin.list_consumer_groups(request_timeout=10).result()
         group_ids = [group.group_id for group in groups.valid]
-        group_descriptions = admin.describe_consumer_groups(group_ids, request_timeout = 10)
-        assigned = []
-        unassigned = []
-        consumer_groups = []
 
+        if len(group_ids) == 0:
+            return {
+                "assignedConsumers": assigned,
+                "unassignedConsumers": unassigned,
+                "consumerGroups": consumer_groups
+            }
+
+        group_descriptions = admin.describe_consumer_groups(group_ids, request_timeout = 10)
         for group_id in group_ids:
             curr_assigned = []
             # Get committed offsets for group
@@ -557,7 +622,7 @@ async def list_partitions():
 
             # Get all topics this group is consuming
             topics = list({topic_partition.topic for topic_partition in group_offsets.topic_partitions})
-            topic_meta = admin.list_topics(timeout=10).topics
+            topic_metadata = admin.list_topics(timeout=10)
             group_members = group.members
 
             for member in group_members:
@@ -568,6 +633,7 @@ async def list_partitions():
                 # Check each assigned partition
                 for tp in assignment.topic_partitions:
                     committed = None
+
                     for offset_tp in group_offsets.topic_partitions:
                         if offset_tp.topic == tp.topic and offset_tp.partition == tp.partition:
                             committed = offset_tp.offset
@@ -580,6 +646,8 @@ async def list_partitions():
                         latest = None
                         lag = None
 
+                    partition_metadata = topic_metadata.topics.get(tp.topic).partitions.get(tp.partition)
+
                     assigned_partition = {
                         "consumerName": consumer_name,
                         "consumerGroup": group_id,
@@ -587,6 +655,8 @@ async def list_partitions():
                         "partition": tp.partition,
                         "committedOffset": committed,
                         "latestOffset": latest,
+                        "leader": partition_metadata.leader,
+                        "replicas": partition_metadata.replicas,
                         "lag": lag
                     }
                     curr_assigned.append(assigned_partition)
@@ -605,7 +675,7 @@ async def list_partitions():
                 "id": group_id,
                 "members": len([member.client_id for member in group_members]),
                 "topics": topics,
-                "lag": sum([a['lag'] for a in curr_assigned]),
+                "lag": sum([a['lag'] if a['lag'] else 0 for a in curr_assigned]),
                 "status": 'empty' if len([member.client_id for member in group_members]) == 0 else 'running'
 
             })
@@ -650,6 +720,7 @@ async def create_consumer(req: ConsumerInfo):
             low, high = kafka_consumer.get_watermark_offsets(TopicPartition(req.topics[0], partition_id))
             messages_in_partition = high - low
             total_messages += messages_in_partition
+
     except KafkaException as e:
         raise HTTPException(status_code=500, detail=f"Failed to create consumer: {e}")
 
@@ -952,7 +1023,7 @@ def send_cat_gossip(name: str, topic: str, duration: int):
         try:
             producer.produce(topic, msg.encode("utf-8"))
             meta.messagesSent += 1
-            logger.info(f"[CAT GOSSIP] {name} -> {topic}: {msg}")
+            # logger.info(f"[CAT GOSSIP] {name} -> {topic}: {msg}")
         except Exception as e:
             logger.error(f"Producer {name} error: {e}")
             break

@@ -11,6 +11,7 @@ import { ConsumersManagement } from './components/consumers-management';
 import { SchemaRegistry } from './components/schema-registry';
 import { Dashboard } from './components/dashboard';
 import { Toaster } from './components/ui/sonner';
+import { Producer, Consumer } from '@/types';
 
 const navigation = [
   // { name: 'Dashboard', icon: Activity, id: 'dashboard' },
@@ -27,6 +28,9 @@ const apiURL = import.meta.env.VITE_API_BASE_URL;
 export default function App() {
   const [activeSection, setActiveSection] = useState('cluster');
   const [topics, setTopics] = useState<string[]>([]);
+  const [consumers, setConsumers] = useState<Consumer[]>([]);
+  const [producers, setProducers] = useState<Producer[]>([]);
+  
 
   const getTopics = async () => {
     try {
@@ -40,7 +44,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    getTopics();
+    const timerId = setTimeout(() => {
+        getTopics();
+      }, 1000); // 1-second delay before getting partition assignments
   }, []);
 
   const renderActiveSection = () => {
@@ -50,11 +56,11 @@ export default function App() {
       case 'cluster':
         return <ClusterManagement apiURL={apiURL}/>;
       case 'topics':
-        return <TopicsManagement topics={topics} setTopics={setTopics} apiURL={apiURL}/>;
+        return <TopicsManagement topics={topics} setTopics={setTopics} consumers={consumers} producers={producers} apiURL={apiURL}/>;
       case 'producers':
-        return <ProducersManagement topics={topics} apiURL={apiURL}/>;
+        return <ProducersManagement topics={topics} apiURL={apiURL} producers={producers} setProducers={setProducers}/>;
       case 'consumers':
-        return <ConsumersManagement topics={topics} apiURL={apiURL}/>;
+        return <ConsumersManagement topics={topics} apiURL={apiURL} consumers={consumers} setConsumers={setConsumers}/>;
       case 'schema':
         return <SchemaRegistry />;
       default:

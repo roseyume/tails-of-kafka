@@ -15,103 +15,11 @@ import { ScrollArea } from './ui/scroll-area';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './ui/pagination';
 import { MessageSquare, Plus, Trash2, Play, Square, Users, Eye, ArrowLeftRight, Filter, Search, Settings, Edit, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { Consumer, ConsumerGroup, ConsumerRequest, Message, ParititionAssignment, PartitionReassignment } from '@/types';
 
 const invisible = true
 
-interface Consumer {
-  name: string;
-  groupId: string;
-  topics: string[];
-  status: 'running' | 'stopped' | 'error';
-  messagesConsumed: number;
-  rate: number; // messages per second
-  autoOffsetReset: 'earliest' | 'latest' | 'none';
-  enableAutoCommit: boolean;
-  autoCommitInterval: number;
-}
-
-interface ConsumerGroup {
-  id: string;
-  members: number;
-  topics: string[];
-  status: 'stable' | 'empty' | 'dead';
-  lag: number;
-}
-
-interface ConsumerRequest {
-  consumerName?: string;
-  topic?: string;
-  searchTerm?: string;
-  limit: number;
-  offset: number;
-}
-
-interface Message {
-  key: string;
-  value: string;
-  partition: number;
-  message_offset: number;
-  timestamp: string;
-  topic: string;
-  consumer_name?: string;
-}
-
-interface PartitionAssignment {
-  partition: number;
-  consumerName: string;
-  topic: string;
-  committedOffset: number;
-  latestOffset: number;
-  lag: number;
-}
-
-interface PartitionReassignment {
-  id: string;
-  topic: string;
-  partition: number;
-  fromConsumer: string;
-  toConsumer: string;
-  timestamp: string;
-  status: 'pending' | 'completed' | 'failed';
-}
-
-export function ConsumersManagement({topics, apiURL}) {
-
-  const [consumers, setConsumers] = useState<Consumer[]>([
-    {
-      name: 'User Events Consumer',
-      groupId: 'user-analytics',
-      topics: ['user-events'],
-      status: 'running',
-      messagesConsumed: 1203,
-      rate: 15,
-      autoOffsetReset: 'latest',
-      enableAutoCommit: true,
-      autoCommitInterval: 5000,
-    },
-    {
-      name: 'Order Processing Consumer',
-      groupId: 'order-processing',
-      topics: ['order-events'],
-      status: 'running',
-      messagesConsumed: 742,
-      rate: 8,
-      autoOffsetReset: 'earliest',
-      enableAutoCommit: true,
-      autoCommitInterval: 1000,
-    },
-    {
-      name: 'Notification Consumer',
-      groupId: 'notifications',
-      topics: ['notifications'],
-      status: 'stopped',
-      messagesConsumed: 0,
-      rate: 0,
-      autoOffsetReset: 'latest',
-      enableAutoCommit: false,
-      autoCommitInterval: 5000,
-    },
-  ]);
+export function ConsumersManagement({topics, apiURL, consumers, setConsumers}) {
 
   const [consumerGroups, setConsumerGroups] = useState<ConsumerGroup[]>([]);
 
@@ -119,44 +27,7 @@ export function ConsumersManagement({topics, apiURL}) {
   const [partitionAssignments, setPartitionAssignments] = useState<PartitionAssignment[]>([]);
 
   const [partitionReassignments, setPartitionReassignments] = useState<PartitionReassignment[]>([
-    {
-      id: 'rebalance-1',
-      topic: 'user-events',
-      partition: 1,
-      fromConsumer: 'cons-2',
-      toConsumer: 'cons-1',
-      timestamp: '10:25:30',
-      status: 'completed',
-    },
-    {
-      id: 'rebalance-2',
-      topic: 'order-events',
-      partition: 0,
-      fromConsumer: 'cons-1',
-      toConsumer: 'cons-2',
-      timestamp: '10:20:15',
-      status: 'pending',
-    }
-    ,
-    {
-      id: 'rebalance-2',
-      topic: 'order-events',
-      partition: 0,
-      fromConsumer: 'cons-1',
-      toConsumer: 'cons-2',
-      timestamp: '10:20:15',
-      status: 'pending',
-    },
-  
-    {
-      id: 'rebalance-2',
-      topic: 'order-events',
-      partition: 0,
-      fromConsumer: 'cons-1',
-      toConsumer: 'cons-2',
-      timestamp: '10:20:15',
-      status: 'pending',
-    },
+    
   ]);
 
   const [newConsumer, setNewConsumer] = useState({
@@ -187,6 +58,14 @@ export function ConsumersManagement({topics, apiURL}) {
     partition: undefined as number | undefined,
   });
   const messagesPerPage = 50;
+
+  const msgTableQueryRefs = useRef({
+    consumer: selectedConsumerForMessages,
+    topic: selectedTopicForMessages,
+    searchTerm: searchTermForMessages,
+    msgsPerPage: messagesPerPage,
+    curPage: currentPage,
+  });
 
   const createConsumer = async() => {
     if (!newConsumer.name.trim() || !newConsumer.groupId.trim() || newConsumer.topics.length === 0) {
@@ -264,13 +143,13 @@ export function ConsumersManagement({topics, apiURL}) {
   const totalMessagesConsumed = consumers.reduce((sum, c) => sum + c.messagesConsumed, 0);
   const totalGroups = new Set(consumers.map(c => c.groupId)).size;
 
-  const getConsumedMessages = async (selectedConsumer, selectedTopic, searchTerm) => {
+  const getConsumedMessages = async (selectedConsumer, selectedTopic, searchTerm, msgsPerPage, curPage) => {
     const consumerRequest:ConsumerRequest = {
       consumerName: selectedConsumer != "all" ? selectedConsumer : undefined,
       topic: selectedTopic != "all" ? selectedTopic : undefined,
       searchTerm: searchTerm? searchTerm: undefined,
-      limit: messagesPerPage,
-      offset: (currentPage - 1) * messagesPerPage
+      limit: msgsPerPage,
+      offset: (curPage - 1) * msgsPerPage
     };
 
     try {
@@ -363,42 +242,30 @@ export function ConsumersManagement({topics, apiURL}) {
     }
   };
 
-  const selectedConsumerRef = useRef(selectedConsumerForMessages);
+  useEffect(() => {
+    Object.assign(msgTableQueryRefs.current, {
+      consumer: selectedConsumerForMessages,
+      topic: selectedTopicForMessages,
+      searchTerm: searchTermForMessages,
+      msgsPerPage: messagesPerPage,
+      curPage: currentPage,
+    });
+  }, [ selectedConsumerForMessages, selectedTopicForMessages, searchTermForMessages, messagesPerPage,currentPage,]);
 
   useEffect(() => {
-    selectedConsumerRef.current = selectedConsumerForMessages;
-  }, [selectedConsumerForMessages]);
-
-  const selectedTopicRef = useRef(selectedTopicForMessages);
-  useEffect(() => {
-    selectedTopicRef.current = selectedTopicForMessages;
-  }, [selectedTopicForMessages]);
-
-  const searchTermRef = useRef(searchTermForMessages);
-  useEffect(() => {
-    searchTermRef.current = searchTermForMessages;
-  }, [searchTermForMessages]);
-
-  useEffect(() => {
-    getConsumedMessages(selectedConsumerForMessages, selectedTopicForMessages, searchTermForMessages);
+    getConsumedMessages(selectedConsumerForMessages, selectedTopicForMessages, searchTermForMessages, messagesPerPage, currentPage);
   }, [consumers, currentPage, selectedTopicForMessages, selectedConsumerForMessages, searchTermForMessages]);
 
 
   useEffect(() => {
     getConsumers();
     const interval = setInterval(async () => {
-        getConsumedMessages(selectedConsumerRef.current, selectedTopicRef.current, searchTermRef.current); 
-    }, 5000); // 5s
+        const { consumer, topic, searchTerm, msgsPerPage, curPage } = msgTableQueryRefs.current;
+        getConsumedMessages(consumer, topic, searchTerm, msgsPerPage, curPage); 
+        getPartitionAssignments();
+    }, 4000); // 4s
     return () => clearInterval(interval); // cleanup
   }, []);
-
-  useEffect(() => {
-    if(consumers.length > 0){
-      const timerId = setTimeout(() => {
-        getPartitionAssignments();
-      }, 1000); // 1-second delay before getting partition assignments
-    }
-  }, [consumers]);
 
   return (
     <div className="space-y-6">
@@ -666,7 +533,7 @@ export function ConsumersManagement({topics, apiURL}) {
           <CardDescription>Monitor consumer group status and lag</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {consumerGroups.map((group) => (
               <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="space-y-1">
@@ -704,10 +571,10 @@ export function ConsumersManagement({topics, apiURL}) {
                 <CardTitle>Partition Assignments</CardTitle>
                 <CardDescription>Current partition assignments per consumer</CardDescription>
               </div>
-              <Button onClick={triggerPartitionReassignment} variant="outline">
+              {/* <Button onClick={triggerPartitionReassignment} variant="outline">
                 <ArrowLeftRight className="w-4 h-4 mr-2" />
                 Trigger Rebalance
-              </Button>
+              </Button> */}
             </div>
           </CardHeader>
           <CardContent>
@@ -719,6 +586,8 @@ export function ConsumersManagement({topics, apiURL}) {
                   <TableHead>Partitions</TableHead>
                   <TableHead>Committed Offset</TableHead>
                   <TableHead>Latest Offset</TableHead>
+                  <TableHead>Leader Broker</TableHead>
+                  <TableHead>Replicas</TableHead>
                   <TableHead>Lag</TableHead>
                 </TableRow>
               </TableHeader>
@@ -728,8 +597,10 @@ export function ConsumersManagement({topics, apiURL}) {
                     <TableCell className="font-medium">{assignment.consumerName}</TableCell>
                     <TableCell>{assignment.topic}</TableCell>
                     <TableCell>{assignment.partition}</TableCell>
-                    <TableCell>{assignment.committedOffset.toLocaleString()}</TableCell>
-                    <TableCell>{assignment.latestOffset.toLocaleString()}</TableCell>
+                    <TableCell>{assignment.committedOffset}</TableCell>
+                    <TableCell>{assignment.latestOffset}</TableCell>
+                    <TableCell>{assignment.leader}</TableCell>
+                    <TableCell>{assignment.replicas.join(", ")}</TableCell>
                     <TableCell>
                       <Badge variant={assignment.lag > 20 ? "destructive" : "secondary"}>
                         {assignment.lag}
@@ -742,7 +613,7 @@ export function ConsumersManagement({topics, apiURL}) {
           </CardContent>
         </Card>
 
-        { false && (<Card>
+        { invisible && (<Card>
           <CardHeader>
             <CardTitle>Partition Reassignments</CardTitle>
             <CardDescription>Recent partition reassignment activity</CardDescription>

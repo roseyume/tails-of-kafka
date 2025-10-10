@@ -13,31 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Send, Plus, Trash2, Play, Square, Settings, MessageCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
-
-interface Producer {
-  name: string;
-  topic: string;
-  messagesSent: number;
-  batchSize: number;
-  lingerMs: number;
-  acks: 'all' | '1' | '0';
-  retries: number;
-  compressionType: 'none' | 'gzip' | 'snappy' | 'lz4';
-  isContinuousMessaging?: boolean;
-  continuousMessagingEnd?: number;
-}
-
-interface ProducerRequest {
-  name: string;
-  topic: string;
-  message: string;
-  partition?: number; // optional, defaults to 0 if not provided
-}
-
-interface GossipRequest {
-  duration_seconds: number;
-  topic: string;
-}
+import { Producer, ProducerRequest, GossipRequest } from '@/types';
 
 // Cat gossip messages for continuous messaging feature
 const catGossipMessages = [
@@ -46,9 +22,7 @@ const catGossipMessages = [
   "Luna observed the neighbors getting a new cat carrier. Possible escape plan needed.",
 ]
 
-export function ProducersManagement({topics, apiURL}) {
-
-  const [producers, setProducers] = useState<Producer[]>([]);
+export function ProducersManagement({topics, apiURL, producers, setProducers}) {
 
   const [newProducer, setNewProducer] = useState({
     name: '',
@@ -174,7 +148,6 @@ export function ProducersManagement({topics, apiURL}) {
       axios.post(`${apiURL}/producers/cat-gossip/${continuousProducer.name}`, gossipRequest)
     ]);
 
-
     setTimeout(() => {
       setProducers(prev =>
         prev.map(p =>
@@ -209,6 +182,11 @@ export function ProducersManagement({topics, apiURL}) {
 
   useEffect(() => {
     getProducers();
+
+    const interval = setInterval(async () => {
+        getProducers();
+    }, 3000); // 5s
+    return () => clearInterval(interval); // cleanup
   }, []);
 
   return (

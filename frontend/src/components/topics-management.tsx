@@ -12,23 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Database, Plus, Trash2, Eye, Settings } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { Topic, Partition } from '@/types';
+import { ConsumersManagement } from './consumers-management';
 
-interface Topic {
-  name: string;
-  partitions: number;
-  replicationFactor: number;
-  retentionHours: number;
-}
-
-interface Partition {
-  id: number;
-  leader: number;
-  replicas: number[];
-  isr: number[];
-  offset: number;
-}
-
-export function TopicsManagement({topics, setTopics, apiURL}) {
+export function TopicsManagement({topics, setTopics, apiURL, consumers, producers}) {
 
   const [newTopic, setNewTopic] = useState({
     name: '',
@@ -65,8 +52,18 @@ export function TopicsManagement({topics, setTopics, apiURL}) {
     }
   };
 
-  const deleteTopic = (name: string) => {
-    setTopics(prev => prev.filter(topic => topic.name !== name));
+  const deleteTopic = async(name: string) => {
+    if (consumers.find(c => c.topics.includes(name))){
+      toast.error(`Remove consumers associated with Topic "${name}" first`);
+      return;
+    } else if (producers.find(p => p.topic.includes(name))){
+      toast.error(`Remove producers associated with Topic "${name}" first`);
+      return;
+    }
+    const [topicResponse] = await Promise.all([
+      axios.delete(`${apiURL}/topics/${name}`)
+    ]);
+    setTopics(topicResponse.data);
     toast.success(`Topic "${name}" deleted successfully`);
   };
 
@@ -283,8 +280,9 @@ export function TopicsManagement({topics, setTopics, apiURL}) {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Topic</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete the topic "{topic.name}"? 
-                              This will permanently delete all messages and cannot be undone.
+                              Are you sure you want to delete the topic "{topic.name}"? <br/><br/>
+                              This will permanently delete all messages and cannot be undone.<br/>
+                              NOTE: Please first remove producers and consumers from this topic.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

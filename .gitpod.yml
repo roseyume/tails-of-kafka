@@ -14,19 +14,24 @@ tasks:
       echo "Starting images..."
       docker-compose up -d
 
-      echo "Waiting for PostgreSQL to initialize..."
-      sleep 10
+      echo "Kafka Brokers warming up..."
+      sleep 3
 
-      echo "Starting fast api..."
+      echo "PostgreSQL Database initializing..."
+      sleep 3
+
+      echo "Starting Fast Api..."
       cd backend
-      uvicorn main:app --reload --port 8000 --host 0.0.0.0
+      uvicorn main:app --port 8000 --host 0.0.0.0 &
       cd ..
 
       echo "VITE_API_BASE_URL=$(gp url 8000)" > frontend/.env.development
 
-      echo "Starting kafka dashboard..."
+      echo "Starting Kafka Dashboard..."
       cd frontend
       sleep 10 && npm run dev &   # background React
+      
+      echo "Setup Complete!"
   
 env:
   KAFKAJS_NO_PARTITIONER_WARNING: "1"
