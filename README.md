@@ -34,10 +34,18 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    
    To start, navigate to: https://roseyume-tailsofkafka-ep8vt814m5c.ws-us121.gitpod.io/ and login with your github account
 
+   <img width="932" height="476" alt="image" src="https://github.com/user-attachments/assets/e81d38f9-efd4-48d2-8571-7421d4852bf9" />
+
+
 ---
+
+## Tips and Tricks
+ - For any values that are not explicitly mentioned in the lab step, leave as default.
+ - Also, at the bottom of both the Producer and the Consumer tabs, there is a Configuration Guide that helps explain some of the configurations that are being set.
+
 ## 👉 Scenario 1: Getting Started
 
-“Hey, Mittens. Did you see? There's a new cat next door” ~ Whiskers
+“Hey, Pixie. Did you see? There's a new cat next door” ~ Buddy
 
 What Is a Topic in Kafka?
 A topic is a category or feed name to which records are sent. Producers write messages to topics, and consumers read from them.
@@ -45,7 +53,11 @@ A topic is a category or feed name to which records are sent. Producers write me
 Objective: Understand the basic flow of producing messages in Kafka.
 
 - Create a topic 'NeighborhoodUpdates" with a partition of 1
-- Create a producer 'Whiskers' configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
+- Create a producer 'Buddy' configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
+
+Check your work:
+ - In the "Topic Management" section of the dashboard, your newly created topic should appear.
+ - The "Producer Management" area should display your producer, and the number of messages sent should be greater than 0
 
 ## 📦 Scenario 2: Consume Your First Message
 
@@ -54,14 +66,20 @@ A consumer reads messages from a topic. It can start from the earliest or latest
 
 Objective: Learn how messages flow from the topic to a consumer.
 
-- Create a consumer 'Mittens' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'
+- Create a consumer 'Pixie' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'
+
+Check your work:
+ - The "Consumers Messages" panel should show incoming messages.
 
 ## 📦 Scenario 3: Late to the news!
-“Oh! Oh! Me too! I want to get the neighborhood gossip!” ~ Chase
+“Oh! Oh! Me too! I want to get the neighborhood gossip!” ~ Sammy
 
 Objective: Learn how offset configurations can impact initial message consumption
 
-- Create another consumer 'Chase' configured for topic 'NeighborhoodUpdates in the consumer group 'dog-consumers' and auto offset reset 'latest'
+- Create another consumer 'Sammy' configured for topic 'NeighborhoodUpdates in the consumer group 'dog-consumers' and auto offset reset 'latest'
+
+Check your work:
+ - In the "Consumers Messages" view, you should notice that Sammy missed all previous messages that were sent.
 
 ## 📦 Scenario 4: Scaling the Pet Gossip
 
@@ -75,11 +93,11 @@ It's good to note that while topics might seem similar to message queues, they a
 
 Objective: Partitioning enables parallelism, allowing you to produce and consume from multiple partitions simultaneously.
 
-- Recreate the topic 'NeighborhoodUpdates' with 5 partitions instead of 1
+- Recreate the topic 'NeighborhoodUpdates' with 6 partitions instead of 1
 - Create 2 producers configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
 
 ## 📦 Scenario 5: Bad Server
-"There were bugs in the server so I helped take care of them 😊" ~ Whiskers
+"There were bugs in the server so I helped take care of them 😊" ~ Buddy
 
 To ensure high availability and fault tolerance, Kafka uses replication. Each partition has:
 
@@ -108,14 +126,14 @@ Objective: Understand how Kafka uses replication to continue processing without 
 
 ## 📦 Scenario 6: Topic Design
 
-"I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Mittens
+"I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Pixie
 
 Separating data streams into topics helps organize messages and manage consumers efficiently.
 
 Objective: Learn topic categorization and multi-topic consumption.
 
 - Delete the 'NeighborhoodUpdates' topic and create 3 new ones 'YardDrama', 'IndoorCrimes' and 'ParkUpdates'.
-- Create producers to each and recreate the consumer 'Mittens'
+- Create producers to each and recreate the consumer 'Pixie'
 
 
 ## 👯‍♀️ Scenario 7: Consumer Group Chaos
