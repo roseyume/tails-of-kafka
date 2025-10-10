@@ -144,19 +144,19 @@ services:
     restart: unless-stopped
 
   #  ================================== Schema Registry ========================================== #
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.3.3
-    hostname: schema-registry
-    container_name: schema-registry
-    depends_on:
-      - kafka-1
-      - kafka-2
-      - kafka-3
-    ports:
-      - "8081:8081"
-    environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka-1:19092,kafka-2:19093,kafka-3:19094'
-      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081  
+  # schema-registry:
+  #   image: confluentinc/cp-schema-registry:7.3.3
+  #   hostname: schema-registry
+  #   container_name: schema-registry
+  #   depends_on:
+  #     - kafka-1
+  #     - kafka-2
+  #     - kafka-3
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     SCHEMA_REGISTRY_HOST_NAME: schema-registry
+  #     SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka-1:19092,kafka-2:19093,kafka-3:19094'
+  #     SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081  
 
 

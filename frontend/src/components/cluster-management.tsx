@@ -27,6 +27,30 @@ export function ClusterManagement({apiURL}) {
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  const updateBroker = async (brokerId: number, updatedBrokers) => {
+    setBrokers(prevBrokers => {
+      const updatedBroker = updatedBrokers.find(broker => broker.broker_id === brokerId);
+
+      if (!updatedBroker) {
+        console.warn(`Broker ${brokerId} not found in API response`);
+        return prevBrokers;
+      }
+
+      const exists = prevBrokers.some(
+        broker => broker.broker_id === brokerId
+      );
+
+      const newBrokers = exists? prevBrokers.map(broker =>
+            broker.broker_id === brokerId
+              ? updatedBroker
+              : broker
+          )
+        : [...prevBrokers, updatedBroker]
+
+      return newBrokers.sort((a, b) => a.broker_id - b.broker_id);
+    });
+  }
+
   const startBroker = async (id: number) => {
     if(!updateBrokerState(id, 'restarting')){
       return;
@@ -35,7 +59,7 @@ export function ClusterManagement({apiURL}) {
     const [brokerResponse] = await Promise.all([
       axios.post(`${apiURL}/brokers/restart/${id}`)
     ]);
-    setBrokers(brokerResponse.data.broker);
+    updateBroker(id, brokerResponse.data.broker)
 
     toast.success(`Broker ${id} started successfully`);
   };
@@ -48,13 +72,14 @@ export function ClusterManagement({apiURL}) {
       toast.success(`Broker ${id} is ${newStatus}`);
     }
 
-    setBrokers((prevBrokers) =>
-      prevBrokers.map((broker) =>
+    setBrokers((prevBrokers) => {
+      const newBrokers = prevBrokers.map((broker) =>
         broker.broker_id === id
           ? { ...broker, status: newStatus } // update only the matching broker
           : broker
       )
-    );
+      return newBrokers.sort((a, b) => a.broker_id - b.broker_id);
+    });
     return true;
   }
 
@@ -67,7 +92,7 @@ export function ClusterManagement({apiURL}) {
     const [brokerResponse] = await Promise.all([
       axios.post(`${apiURL}/brokers/stop/${id}`)
     ]);
-    setBrokers(brokerResponse.data.broker);
+    updateBroker(id, brokerResponse.data.broker)
   
     toast.success(`Broker ${id} stopped successfully`);
   };
@@ -81,7 +106,7 @@ export function ClusterManagement({apiURL}) {
     const [brokerResponse] = await Promise.all([
       axios.delete(`${apiURL}/brokers/delete/${id}`)
     ]);
-    setBrokers(brokerResponse.data.broker);
+    updateBroker(id, brokerResponse.data.broker)
 
     toast.success(`Broker ${id} removed from cluster`);
   };
@@ -93,7 +118,7 @@ export function ClusterManagement({apiURL}) {
     const [brokerResponse] = await Promise.all([
       axios.get(`${apiURL}/brokers/create`)
     ]);
-    setBrokers(brokerResponse.data.broker);
+    updateBroker(id, brokerResponse.data.broker)
     toast.success(`Broker added to cluster`);
   };
 
@@ -125,7 +150,8 @@ export function ClusterManagement({apiURL}) {
       const [brokerResponse] = await Promise.all([
         axios.get(`${apiURL}/brokers`)
       ]);
-      setBrokers(brokerResponse.data)
+
+      setBrokers(brokerResponse.data.sort((a, b) => a.broker_id - b.broker_id))
     } catch (err) {
       console.error(err);
     }

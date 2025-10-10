@@ -92,7 +92,7 @@ app.add_middleware(
 logger.info("This will always appear if flush is enabled by default")
 
 # Kafka Admin client
-BOOTSTRAP_SERVERS = "localhost:9092, localhost:9093, localhost:9094, localhost:9095"
+BOOTSTRAP_SERVERS = "localhost:9092, localhost:9093, localhost:9094"
 admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
 
 # Consumers
@@ -242,6 +242,7 @@ async def get_brokers():
         for broker in stopped_broker:
             if broker.broker_id not in live_brokers:
                 nodes.append(broker)
+
         return nodes
 
     except Exception as e:
@@ -388,7 +389,7 @@ async def read_stream(stream, name):
             break
         print(f"[{name}] {line.decode().rstrip()}")
 
-async def run_compose_command(*args):
+async def run_compose_command(sleep_time, *args):
     """Run docker-compose command on the given service."""
     try:
         process = await asyncio.create_subprocess_exec(
@@ -399,7 +400,7 @@ async def run_compose_command(*args):
             stderr=asyncio.subprocess.PIPE
         )
 
-
+        await asyncio.sleep(sleep_time)
         await asyncio.gather(
             read_stream(process.stdout, "stdout"),
             read_stream(process.stderr, "stderr")
@@ -433,7 +434,7 @@ async def stop_broker(broker_id: int):
     service_name = find_service_name(broker_id)
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
-    await run_compose_command("stop", service_name)
+    await run_compose_command(2, "stop", service_name)
 
     return {"status": "stopped", "service_name": service_name, "broker": await get_brokers()}
 
@@ -443,7 +444,8 @@ async def restart_broker(broker_id: int):
     service_name = find_service_name(broker_id)
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
-    await run_compose_command("restart", service_name)
+
+    await run_compose_command(10, "restart", service_name)
     
     return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
 
@@ -455,9 +457,9 @@ async def delete_broker(broker_id: int):
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
 
     # Stop the container first
-    await run_compose_command("stop", service_name)
+    await run_compose_command(1, "stop", service_name)
     # Remove the container
-    await run_compose_command("rm", "-f", service_name)
+    await run_compose_command(1, "rm", "-f", service_name)
 
     # Optionally: remove the service from docker-compose.yml
     with open(DOCKER_COMPOSE_FILE, "r") as f:
@@ -619,7 +621,7 @@ async def list_partitions():
             group = group_descriptions[group_id].result()
             group_spec = ConsumerGroupTopicPartitions(group_id, None) 
             group_offsets = admin.list_consumer_group_offsets([group_spec])[group_id].result()
-
+ 
             # Get all topics this group is consuming
             topics = list({topic_partition.topic for topic_partition in group_offsets.topic_partitions})
             topic_metadata = admin.list_topics(timeout=10)
