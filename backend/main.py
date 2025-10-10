@@ -741,7 +741,7 @@ async def create_consumer(req: ConsumerInfo):
         topics=req.topics,
         status='running',
         messagesConsumed=0,
-        autoOffsetRest=req.autoOffsetReset,
+        autoOffsetReset=req.autoOffsetReset,
         enableAutoCommit=req.enableAutoCommit,
         autoCommitInterval=req.autoCommitInterval
     )
