@@ -224,3 +224,6 @@ Consumers know where they left off. Producers don’t over-share. Everyone knows
 As a result, the squirrels were able to find the dog digging up the acorns in the park.
 
 🏅🎖️ You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
+
+
+https://roseyume-tailsofkafka-f5ktysc7j0n.ws-us121.gitpod.io/ 
