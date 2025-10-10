@@ -607,14 +607,12 @@ async def list_partitions():
     try:
         groups = admin.list_consumer_groups(request_timeout=10).result()
         group_ids = [group.group_id for group in groups.valid]
-
         if len(group_ids) == 0:
             return {
                 "assignedConsumers": assigned,
                 "unassignedConsumers": unassigned,
                 "consumerGroups": consumer_groups
             }
-
         group_descriptions = admin.describe_consumer_groups(group_ids, request_timeout = 10)
         for group_id in group_ids:
             curr_assigned = []
@@ -894,6 +892,8 @@ async def get_consumer_messages(req: ConsumerRequest):
 # -------------------------------
 @app.get("/producers")
 def get_producers():
+    for producer_name, producer_meta in producer_metadata.items():
+        producer_meta.messagesSent = producers[producer_name].sent_count
     return list(producer_metadata.values())
 
 @app.post("/producers/create")
@@ -992,9 +992,8 @@ def delete_producer(name: str):
 
     try:
         producer = producers.pop(name)
-        producer.flush(timeout=5)  # flush pending messages
+        producer.flush()  # flush pending messages
         producer_metadata.pop(name)
-
         return {
             "success": True,
             "message": f"Producer '{name}' stopped and removed",
@@ -1025,7 +1024,7 @@ def send_cat_gossip(name: str, topic: str, duration: int):
         try:
             producer.send_message(topic, msg)
             logger.info(f"[CAT GOSSIP] {name} -> {topic}: {msg}")
-            time.sleep(1)  # small delay between gossips
+            time.sleep(1.3)  # small delay between gossips
 
         except Exception as e:
             logger.error(f"Producer {name} error: {e}")

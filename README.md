@@ -129,7 +129,7 @@ Consistency: With the min.insync.replicas configuration, Kafka guarantees that w
 
 Objective: Understand how Kafka uses replication to continue processing without downtime.
 
-- Stop one of the brokers
+- After the producers have finished sending messages, stop one of the brokers. 
 - Produce messages while the broker is offline and verify they are not lost
 
 **Hint:** Ensure a replication factor > 1 on the broker and `acks=all` on the producer.
@@ -142,6 +142,7 @@ Separating data streams into topics helps organize messages and manage consumers
 
 Objective: Learn topic categorization and multi-topic consumption.
 
+- Start the stopped broker
 - Delete the 'NeighborhoodUpdates' topic and create 3 new ones 'YardDrama', 'IndoorCrimes' and 'ParkUpdates'.
 - Create producers to each and recreate the consumer 'Pixie'
 

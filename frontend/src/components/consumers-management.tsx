@@ -534,7 +534,7 @@ export function ConsumersManagement({topics, apiURL, consumers, setConsumers}) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {consumerGroups.map((group) => (
+            {consumerGroups && consumerGroups.map((group) => (
               <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="space-y-1">
                   <h4 className="font-medium">{group.id}</h4>
@@ -592,7 +592,7 @@ export function ConsumersManagement({topics, apiURL, consumers, setConsumers}) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {partitionAssignments.map((assignment, index) => (
+                {partitionAssignments && partitionAssignments.map((assignment, index) => (
                   <TableRow key={index}>
                     <TableCell className="font-medium">{assignment.consumerName}</TableCell>
                     <TableCell>{assignment.topic}</TableCell>
