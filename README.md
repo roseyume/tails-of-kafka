@@ -186,6 +186,8 @@ Objective: Understand how offset management prevents data duplication and data l
 # ✅ Check Your Work
  - In the "Consumed Messages" for Pixie, all messages produced while asleep should appear.
 
+https://roseyume-tailsofkafka-f5ktysc7j0n.ws-us121.gitpod.io/
+
 ## 👯‍♀️ Scenario 8: Consumer Group Chaos
 
 “A group of squirrels are out to quickly find out which dog has been digging holes in the neighborhood park, using the cat's gossip boards. But they’re hearing duplicate stories!”
