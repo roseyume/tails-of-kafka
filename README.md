@@ -32,10 +32,14 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 
    Prerequisite: a github account is needed and can create created at: https://github.com/
    
-   To start, navigate to: https://roseyume-tailsofkafka-ep8vt814m5c.ws-us121.gitpod.io/ and login with your github account
-
+   To start, navigate to: https://gitpod.io/# and login with your github account
    <img width="932" height="476" alt="image" src="https://github.com/user-attachments/assets/e81d38f9-efd4-48d2-8571-7421d4852bf9" />
 
+   Then, "Configure your own repository"
+   <img width="3198" height="1611" alt="image" src="https://github.com/user-attachments/assets/6f8a3fcf-5d27-4690-b34b-2515eb035e60" />
+
+   And Copy this repo's link (https://github.com/roseyume/tails-of-kafka) into the "Select a Repository" box
+   <img width="1713" height="1245" alt="image" src="https://github.com/user-attachments/assets/86452107-3e03-4d25-b754-1547c2f9c2bd" />
 
 ---
 
