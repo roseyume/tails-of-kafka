@@ -99,7 +99,7 @@ It's good to note that while topics might seem similar to message queues, topics
 
 Objective: Partitioning enables parallelism, allowing you to produce and consume from multiple partitions simultaneously.
 
-- Delete the consumers 'Sammy' and 'Pixie' and the producer 'Buddy'
+- Delete the consumers 'Sammy' and 'Pixie' and the producer 'Buddy' -- **Note: Only delete after producer is done 
 - Recreate the topic 'NeighborhoodUpdates' with 6 partitions instead of 1
 - Create 2 producers configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
 - Recreate the consumer 'Pixie'
