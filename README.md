@@ -134,6 +134,9 @@ Objective: Understand how Kafka uses replication to continue processing without 
 
 **Hint:** Ensure a replication factor > 1 on the broker and `acks=all` on the producer.
 
+# ✅ Check Your Work
+ - In the "Partition Assignments" table, you should notice that the broker that failed is not the Leader Broker for any of the partitions.
+
 ## 📦 Scenario 6: Topic Design
 
 "I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Pixie
@@ -142,26 +145,16 @@ Separating data streams into topics helps organize messages and manage consumers
 
 Objective: Learn topic categorization and multi-topic consumption.
 
-- Start the stopped broker
+- Once the producer stops sending, start the stopped broker
 - Delete the 'NeighborhoodUpdates' topic and create 3 new ones 'YardDrama', 'IndoorCrimes' and 'ParkUpdates'.
-- Create producers to each and recreate the consumer 'Pixie'
+- Create producers to each and recreate the consumer 'Pixie'. Subscribe Pixie to just 2 of the topics.
 
-## 👯‍♀️ Scenario 7: Consumer Group Chaos
+# ✅ Check Your Work
+ - In the "Consumed Messages" for Pixie, only messages produced to the 2 topics Pixie is subscribed to should appear.
 
-“A group of squirrels are out to quickly find out which dog has been digging holes in the neighborhood park, using the cat's gossip boards. But they’re hearing duplicate stories!”
+## 📦 Scenario 7: Consumer Crash
 
-What is a consumer group?
-A consumer group in Kafka is a collection of one or more consumers that work together to read data from a Kafka topic in a coordinated way.
-Each consumer in the group is assigned a subset of partitions from the topic, and no two consumers in the same group will read the same partition. This enables parallel processing while ensuring each message is processed only once by one consumer in the group.
-
-Objective:
-
-- Create 3 squirrel consumers to read the news across all the topics and group them into the same consumer group to evenly divide the work.
-
-
-## 💥 Scenario 8: Missing out on the latest gossip!
-
-“Squirrel 3's listener crashed! That's so much gossip to go through again!”
+"I'm going to take a nap for a little while..." ~ Pixie
 
 How Offset Management Works
 When a consumer reads messages from a partition, it replies to kafka with an acknowledge.
@@ -184,9 +177,43 @@ Automatic commit (enable.auto.commit=true) commits offsets periodically without 
 
 Manual commit (enable.auto.commit=false) gives full control to commit offsets only after messages are safely processed, supporting more reliable processing at the cost of additional code complexity.
 
-Objective: Understand how offset management prevents data duplication and data loss
+Objective: Understand how offset management prevents data duplication and data loss while a consumer is down
 
-- Restart one of the squirrel consumers and confirm it resumes from last committed offset.
+- Stop running consumer "Pixie"
+- Send messages to one of the topics Pixie was subscribed too
+- Restart Pixie and confirm that Pixie received all messaged that were sent while she was sleeping
+
+# ✅ Check Your Work
+ - In the "Consumed Messages" for Pixie, all messages produced while asleep should appear.
+
+## 👯‍♀️ Scenario 8: Consumer Group Chaos
+
+“A group of squirrels are out to quickly find out which dog has been digging holes in the neighborhood park, using the cat's gossip boards. But they’re hearing duplicate stories!”
+
+What is a consumer group?
+A consumer group in Kafka is a collection of one or more consumers that work together to read data from a Kafka topic in a coordinated way.
+Each consumer in the group is assigned a subset of partitions from the topic, and no two consumers in the same group will read the same partition. This enables parallel processing while ensuring each message is processed only once by one consumer in the group.
+
+Objective:
+
+- Create 3 squirrel consumers to read the news across all the topics and group them into the same consumer group to evenly divide the work.
+
+# ✅ Check Your Work
+ - In the "Partition Assignments" table, you should notice that the squirrels split up the partitions between themselves. 
+
+## 💥 Scenario 9: Missing out on the latest gossip!
+
+“Squirrel 3's listener crashed! That's so much gossip to go through again!”
+
+In a consumer group, if one consumer goes down, its partitions are automatically redistributed among the remaining consumers. Once the crashed consumer comes back online, the group will rebalance again so it can pick up where it left off — starting from the last committed offset.
+
+Objective:
+
+ - Stop Squirrel1 and observe how the partitions are redistributed among the remaining squirrels.
+ - Restart Squirrel1 and observe how the partitions are reassigned again.
+
+# ✅ Check Your Work
+ - In the "Partition Assignments" table, you should notice that the squirrels split up the partitions were adjusted when the squirrel was turned off and once again when it was turned on.
 
 ## 🧶 Cat Gossip Central has brought justice to the squirrel community
 
