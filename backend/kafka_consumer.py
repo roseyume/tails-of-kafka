@@ -12,7 +12,7 @@ def consume_single_consumer(consumer_name: str, topics: list[str], consumer_obj:
     buffer = []
     last_flush = time.time()
     FLUSH_INTERVAL = 2  # seconds
-    BATCH_SIZE = 50
+    BATCH_SIZE = 5
 
     consumer_obj.subscribe(topics) 
     print(f"[{consumer_name}] Started consuming {topics}", flush=True)
@@ -40,7 +40,7 @@ def consume_single_consumer(consumer_name: str, topics: list[str], consumer_obj:
                     "timestamp": datetime.utcfromtimestamp(msg.timestamp()[1]/1000)
                 }
                 buffer.append(row)
-
+                
             # Flush batch if full or interval passed
             if buffer and (len(buffer) >= BATCH_SIZE or time.time() - last_flush >= FLUSH_INTERVAL):
                 future = asyncio.run_coroutine_threadsafe(

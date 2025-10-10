@@ -7,6 +7,7 @@ from models.schemas import *
 from database.init import database
 from database.tables import messages
 from kafka_consumer import consume_single_consumer
+from kafka_producer import ProducerTracker
 import logging, re
 import yaml
 import subprocess
@@ -903,7 +904,7 @@ def create_producer(req: ProducerConfigRequest):
             detail=f"Producer '{req.name}' already exists"
         )
 
-    producer = Producer({
+    producers[req.name] = ProducerTracker(req.name, {
         "bootstrap.servers": BOOTSTRAP_SERVERS,
         "acks": req.acks,
         "batch.size": req.batchSize,  
@@ -911,8 +912,6 @@ def create_producer(req: ProducerConfigRequest):
         "compression.type": req.compressionType,
         "retries": req.retries,
     })
-
-    producers[req.name] = producer
 
     producer_metadata[req.name] = ProducerInfo(
         name=req.name,
@@ -937,7 +936,7 @@ def update_producer(req: ProducerConfigRequest):
         # Flush and discard old producer
         producers[req.name].flush()
 
-    producer = Producer({
+    producers[req.name] = ProducerTracker(req.name, {
         "bootstrap.servers": BOOTSTRAP_SERVERS,
         "acks": req.acks,
         "batch.size": req.batchSize,  
@@ -946,7 +945,6 @@ def update_producer(req: ProducerConfigRequest):
         "retries": req.retries,
     })
 
-    producers[req.name] = producer
     producer_metadata[req.name] = ProducerInfo(
         name=req.name,
         topic=req.topic,
@@ -967,7 +965,7 @@ def produce_message(req: ProducerRequest):
     producer = producers[req.name]
 
     try:
-        producer.produce(req.topic, req.message.encode())
+        producer.send_message(req.topic, req.message.encode())
         producer.flush()
 
         # update stats
@@ -1007,12 +1005,14 @@ def delete_producer(name: str):
             status_code=500,
             detail=f"Error stopping producer '{name}': {str(e)}"
         )
-
+        
 def send_cat_gossip(name: str, topic: str, duration: int):
     """Background thread to send gossip messages for duration"""
+
     if name not in producers:
         return
     
+    start_time = time.time()
     producer = producers[name]
     meta = producer_metadata[name]
     end_time = time.time() + duration
@@ -1023,13 +1023,13 @@ def send_cat_gossip(name: str, topic: str, duration: int):
  
         msg = cat_name + random_message
         try:
-            producer.produce(topic, msg.encode("utf-8"))
-            meta.messagesSent += 1
-            # logger.info(f"[CAT GOSSIP] {name} -> {topic}: {msg}")
+            producer.send_message(topic, msg)
+            logger.info(f"[CAT GOSSIP] {name} -> {topic}: {msg}")
+            time.sleep(1)  # small delay between gossips
+
         except Exception as e:
             logger.error(f"Producer {name} error: {e}")
-            break
-        time.sleep(1)  # send roughly 1 message per second
+            break  
     
     producer.flush()
 
