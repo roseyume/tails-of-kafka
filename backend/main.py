@@ -7,7 +7,7 @@ from models.schemas import *
 from database.init import database
 from database.tables import messages
 from kafka_consumer import consume_single_consumer
-import logging
+import logging, re
 import yaml
 import subprocess
 import os
@@ -17,6 +17,7 @@ import threading, queue
 import random
 import asyncio
 from sqlalchemy import func, select, delete
+from concurrent.futures import ThreadPoolExecutor
 
 # ----------------------------
 # Configure root logger
@@ -28,8 +29,10 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
 app = FastAPI()
+executor = ThreadPoolExecutor(max_workers=10)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+DOCKER_COMPOSE_FILE = os.path.join(script_dir, "..", "docker-compose.yml")
 
 @app.on_event("startup")
 async def startup():
@@ -89,7 +92,7 @@ app.add_middleware(
 logger.info("This will always appear if flush is enabled by default")
 
 # Kafka Admin client
-BOOTSTRAP_SERVERS = "localhost:9092"
+BOOTSTRAP_SERVERS = "localhost:9092, localhost:9093, localhost:9094, localhost:9095"
 admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
 
 # Consumers
@@ -110,24 +113,21 @@ async def get_cluster_configs():
     try:
         # --- Get cluster metadata to discover brokers ---
         metadata = admin.list_topics(timeout=10)
+
         # Collect broker IDs from replicas (alive + dead)
-        broker_ids = set()
-        for topic in metadata.topics.values():
-            for partition in topic.partitions.values():
-                broker_ids.update(partition.replicas)
+        broker_ids = [broker.id for broker in metadata.brokers.values()]
 
         if not broker_ids:
             raise HTTPException(status_code=500, detail="No brokers found in cluster")
 
         # --- TODO: Fix this so it accurately gives the global configs ---
-        cluster_resource = ConfigResource("BROKER", "1")
+        cluster_resource = ConfigResource("BROKER", str(broker_ids[0]))
         cluster_future = admin.describe_configs([cluster_resource])
-
         global_configs = {}
         try:
             cluster_result = cluster_future[cluster_resource].result()
             for name, entry in cluster_result.items():
-                global_configs[name] = {
+                global_configs[str(name)] = {
                     "value": entry.value,
                     "is_default": entry.is_default,
                     "is_read_only": entry.is_read_only,
@@ -193,6 +193,7 @@ async def update_cluster_config(req: ClusterConfigRequest):
 # -------------------------------
 @app.get("/brokers", response_model=List[Broker])
 async def get_brokers():
+    logger.info(BOOTSTRAP_SERVERS)
     try:
         metadata = admin.list_topics(timeout=5)
         nodes = []
@@ -241,7 +242,7 @@ async def get_brokers():
                     broker_id=broker_id,
                     hostname="unknown",
                     port=0,
-                    status="down",
+                    status="stopped",
                     role="unknown",
                     num_partitions_as_leader=broker_stats[broker_id]["leader_count"],
                     num_partitions_as_follower=broker_stats[broker_id]["follower_count"],
@@ -251,19 +252,53 @@ async def get_brokers():
         return nodes
 
     except Exception as e:
-        logger.error("Failed to fetch metadata: %s", e)
-        return [Broker(
-            broker_id=-1,
-            hostname="unknown",
-            port=0,
-            role="unknown",
-            status="error"
-        )]
+        return get_stopped_brokers()
 
+def get_stopped_brokers(file_path=DOCKER_COMPOSE_FILE):
+    """
+    Reads docker-compose.yml, extracts Kafka brokers, and returns a list of Broker objects
+    with status='stopped' for brokers assumed stopped.
+    
+    """
+    with open(file_path, "r") as f:
+        compose = yaml.safe_load(f)
 
+    brokers_list = []
+    services = compose.get("services", {})
+    for service_name, service_def in services.items():
+        image = service_def.get("image", "")
+        if "kafka" not in image.lower() and not service_name.startswith("kafka"):
+            continue
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-DOCKER_COMPOSE_FILE = os.path.join(script_dir, "..", "docker-compose.yml")
+        broker_id = int(service_def.get("container_name").split("-")[1])
+
+        external_port = 0
+
+        # Parse KAFKA_LISTENERS
+        env_vars = service_def.get("environment", {})
+        kafka_listeners = env_vars.get("KAFKA_LISTENERS", "")
+        for listener in kafka_listeners.split(","):
+            if listener.startswith("LISTENER_EXTERNAL"):
+                match = re.search(r":(\d+)$", listener.strip())
+                if match:
+                    external_port = int(match.group(1))
+                break
+
+        broker_obj = Broker(
+                    broker_id=broker_id,
+                    # hostname="localhost" if external_port != 0 else "unknown",
+                    # port=external_port,
+                    hostname="unknown",
+                    port=0,
+                    status="stopped",
+                    role="unknown",
+                    num_partitions_as_leader=0,
+                    num_partitions_as_follower=0,
+                )
+                
+        brokers_list.append(broker_obj)
+
+    return brokers_list
 
 def find_service_name(broker_id: int) -> str:
     """Find the docker-compose service name for a given broker_id."""
@@ -334,6 +369,7 @@ async def create_broker():
             "restart": "unless-stopped",
         }
 
+
         compose_data["services"][service_name] = new_service
 
         with open(DOCKER_COMPOSE_FILE, "w") as f:
@@ -344,30 +380,47 @@ async def create_broker():
         except subprocess.CalledProcessError as e:
             raise HTTPException(status_code=500, detail=f"Failed to start broker: {e}")
 
-        time.sleep(1)
+        BOOTSTRAP_SERVERS.append("localhost:" + str(29093+broker_id))
+        admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
+
         return {"status": "success", "broker": await get_brokers()}
     except Exception as e:
         print(e)
 
 
-def run_compose_command(*args):
+async def run_compose_command(*args):
     """Run docker-compose command on the given service."""
     try:
-        subprocess.run(
-            ["docker-compose", "-f", DOCKER_COMPOSE_FILE, *args],
-            check=True
+        process = await asyncio.create_subprocess_exec(
+           "docker-compose",
+            "-f", DOCKER_COMPOSE_FILE,
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to {command} {service_name}: {e}")
 
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"docker-compose failed with code {process.returncode}: {stderr.decode()}"
+            )
+
+        time.sleep(1)
+
+    except Exception as e:
+        print(f"Error running docker-compose: {e}")
+        raise
+
+    return stdout.decode().strip()
 
 @app.post("/brokers/stop/{broker_id}")
 async def stop_broker(broker_id: int):
     service_name = find_service_name(broker_id)
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
-    run_compose_command("stop", service_name)
-    time.sleep(1)
+    await run_compose_command("stop", service_name)
+
     return {"status": "stopped", "service_name": service_name, "broker": await get_brokers()}
 
 
@@ -376,8 +429,8 @@ async def restart_broker(broker_id: int):
     service_name = find_service_name(broker_id)
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
-    run_compose_command("restart", service_name)
-    time.sleep(1)
+    await run_compose_command("restart", service_name)
+    
     return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
 
 
@@ -581,7 +634,7 @@ async def create_consumer(req: ConsumerInfo):
     # Kafka consumer configuration
     conf = {
         "client.id" : req.name,
-        "bootstrap.servers": "localhost:9092",  # default, could be extended to frontend
+        "bootstrap.servers": BOOTSTRAP_SERVERS,  # default, could be extended to frontend
         "group.id": req.groupId,
         "auto.offset.reset": req.autoOffsetReset,
         "enable.auto.commit": req.enableAutoCommit,
@@ -778,7 +831,7 @@ def create_producer(req: ProducerConfigRequest):
         )
 
     producer = Producer({
-        "bootstrap.servers": "localhost:9092",
+        "bootstrap.servers": BOOTSTRAP_SERVERS,
         "acks": req.acks,
         "batch.size": req.batchSize,  
         "linger.ms": req.lingerMs,
@@ -812,7 +865,7 @@ def update_producer(req: ProducerConfigRequest):
         producers[req.name].flush()
 
     producer = Producer({
-        "bootstrap.servers": "localhost:9092",
+        "bootstrap.servers": BOOTSTRAP_SERVERS,
         "acks": req.acks,
         "batch.size": req.batchSize,  
         "linger.ms": req.lingerMs,

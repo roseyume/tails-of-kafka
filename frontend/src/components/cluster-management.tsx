@@ -37,6 +37,10 @@ export function ClusterManagement({apiURL}) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const startBroker = async (id: number) => {
+    if(!updateBrokerState(id, 'restarting')){
+      return;
+    }
+
     const [brokerResponse] = await Promise.all([
       axios.post(`${apiURL}/brokers/restart/${id}`)
     ]);
@@ -45,7 +49,30 @@ export function ClusterManagement({apiURL}) {
     toast.success(`Broker ${id} started successfully`);
   };
 
+  const updateBrokerState = (id: number, newStatus: string) => {
+    if (brokers.find(b => b.broker_id === id && b.status === newStatus)){
+      toast.success(`Broker ${id} is already ${newStatus}`);
+      return false;
+    } else {
+      toast.success(`Broker ${id} is ${newStatus}`);
+    }
+
+    setBrokers((prevBrokers) =>
+      prevBrokers.map((broker) =>
+        broker.broker_id === id
+          ? { ...broker, status: newStatus } // update only the matching broker
+          : broker
+      )
+    );
+    return true;
+  }
+
   const stopBroker = async (id: number) => {
+
+    if(!updateBrokerState(id, 'stopping')){
+      return;
+    }
+
     const [brokerResponse] = await Promise.all([
       axios.post(`${apiURL}/brokers/stop/${id}`)
     ]);
@@ -65,6 +92,9 @@ export function ClusterManagement({apiURL}) {
   };
 
   const createBroker = async () => {
+    toast.success(`Creating broker. Please wait...`);
+    setIsAddingBroker(false);
+
     const [brokerResponse] = await Promise.all([
       axios.get(`${apiURL}/brokers/create`)
     ]);
@@ -76,7 +106,7 @@ export function ClusterManagement({apiURL}) {
     switch (status) {
       case 'running': return 'bg-green-100 text-green-800';
       case 'stopped': return 'bg-red-100 text-red-800';
-      case 'error': return 'bg-yellow-100 text-yellow-800';
+      case 'stopping': case 'restarting': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -230,11 +260,11 @@ No additional setup is required. Please confirm to proceed.
                       </Button>
                       
                     )}
-                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setViewingConfigBrokerId(broker.broker_id)}
-                    >
+                    <Button variant="outline" size="sm" disabled={!brokers.find(b => b.broker_id === broker.broker_id && b.status === 'running')} // disable if value is empty
+                            onClick={() => setViewingConfigBrokerId(broker.broker_id)} 
+                            className={`p-1 rounded hover:bg-red-100 transition-colors ${
+                              !brokers.find(b => b.broker_id === broker.broker_id && b.status === 'running')? 'opacity-50 cursor-not-allowed' : ''
+                            }`}>
                       <Eye className="w-4 h-4 mr-1" />
                     </Button>
                     <AlertDialog>

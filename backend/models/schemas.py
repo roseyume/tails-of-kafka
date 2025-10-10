@@ -9,7 +9,7 @@ class Broker(BaseModel):
     hostname: str
     port: int
     role: str  # 'controller' | 'follower'
-    status: str  # 'running' | 'stopped' | 'error'
+    status: str  # 'running' | 'stopped' 
     num_partitions_as_leader: int = 0
     num_partitions_as_follower: int = 0
 
