@@ -21,15 +21,10 @@ def consume_single_consumer(consumer_name: str, topics: list[str], consumer_obj:
         while not stop_event.is_set():
             msg = consumer_obj.poll(1.0)  # still blocking, but short
 
-            if msg is None:
-                time.sleep(1.0) 
-                continue
-
-            if msg.error():
+            if msg is not None and msg.error():
                 if msg.error().code() != KafkaError._PARTITION_EOF:
                     print(f"Kafka error ({consumer_name}): {msg.error()}", flush=True)
-            else:
-
+            elif msg is not None:
                 row = {
                     "consumer_name": consumer_name,
                     "topic": msg.topic(),

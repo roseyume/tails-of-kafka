@@ -816,9 +816,9 @@ def stop_consumer(consumer_name: str):
         consumer = consumers.pop(consumer_name)   # remove from active consumers
         consumer.close()       
         consumer_metadata[consumer_name].status = 'stopped' 
-        logger.info("Consumer {consumer_name} stopped gracefully")
+        logger.info(f"Consumer {consumer_name} stopped gracefully")
 
-        return {"success": True, "message": f"Consumer {consumer_name} deleted", "consumers": get_consumers()}
+        return {"success": True, "message": f"Consumer {consumer_name} stopped", "consumers": get_consumers()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete consumer: {str(e)}")
 
@@ -1024,7 +1024,7 @@ def send_cat_gossip(name: str, topic: str, duration: int):
         try:
             producer.send_message(topic, msg)
             logger.info(f"[CAT GOSSIP] {name} -> {topic}: {msg}")
-            time.sleep(1.3)  # small delay between gossips
+            time.sleep(1.0)  # small delay between gossips
 
         except Exception as e:
             logger.error(f"Producer {name} error: {e}")

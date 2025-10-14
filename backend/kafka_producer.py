@@ -23,7 +23,7 @@ class ProducerTracker:
                 value=value.encode("utf-8"),
                 callback=self.delivery_report
             )
-            self.producer.poll(0)
+            self.producer.poll(1)
         except BufferError:
             print(f"⚠️ [{self.name}] Buffer full, flushing…")
             self.producer.flush()
