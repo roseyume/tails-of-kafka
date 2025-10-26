@@ -44,6 +44,10 @@ services:
       - "5432:5432"
     volumes:
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
   #  ================================== Kafka ========================================== #
   #  latest: confluentinc/cp-server:7.3.3
   kafka-1:
@@ -78,6 +82,10 @@ services:
     volumes:
       - ./data-transfer:/data-transfer
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 10s
+      retries: 20
   kafka-2:
     image: confluentinc/cp-kafka:6.0.1
     container_name: kafka-2
@@ -110,6 +118,10 @@ services:
     volumes:
       - ./data-transfer:/data-transfer
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9093 --list > /dev/null 2>&1"]
+      interval: 10s
+      retries: 20
   kafka-3:
     image: confluentinc/cp-kafka:6.0.1
     container_name: kafka-3
@@ -142,6 +154,10 @@ services:
     volumes:
       - ./data-transfer:/data-transfer
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9094 --list > /dev/null 2>&1"]
+      interval: 10s
+      retries: 20
 
 
 
