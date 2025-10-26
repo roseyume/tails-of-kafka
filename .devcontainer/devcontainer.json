@@ -8,6 +8,9 @@
   
     "postCreateCommand": "bash .devcontainer/postCreate.sh",
     "postStartCommand": "bash .devcontainer/postStart.sh",
+
+    "runServices": [],
+    "overrideCommand": false,
   
     "customizations": {
       "vscode": {
