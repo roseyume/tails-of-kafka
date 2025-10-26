@@ -1,22 +1,15 @@
-## based on https://github.com/gschmutz/stream-processing-workshop/blob/master/01-environment/docker/docker-compose.yml
 # does not include: Connect, Schema Registry, KSQL
 # relies on environment variable PUBLIC_IP 
 # Prepare Environment Variables
 # set PUBLIC_IP to the IP address on which the local host machine connects to the Docker host
 # - this can be 127.0.0.1 when you run Docker Compose locally or it can be the IP address of the VM inside which you have Docker Compose running or even the Public IP address of the Compute Instance in which you run Docker Compose
-
-
-# =====================================================
-# Platform: default
-# Platform Stack:          derived from trivadis/platys-modern-data-platform
-# Platform Stack Version:  derived from 1.10.0
-# =====================================================
-version: '3.5'
-# enforce some dependencies
 networks:
   default:
     name: streaming-platform
 services:
+  dev:
+    build:
+      context: .
   #  ================================== Zookeeper ========================================== #
   #  latest:  image: confluentinc/cp-zookeeper:7.3.3
   zookeeper-1:
