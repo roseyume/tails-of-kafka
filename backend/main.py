@@ -93,7 +93,10 @@ app.add_middleware(
 logger.info("This will always appear if flush is enabled by default")
 
 # Kafka Admin client
-BOOTSTRAP_SERVERS = "localhost:9092, localhost:9093, localhost:9094"
+import os
+
+# Allow overriding bootstrap servers via environment variable when running in containers
+BOOTSTRAP_SERVERS = os.getenv("BOOTSTRAP_SERVERS", "localhost:9092, localhost:9093, localhost:9094")
 admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
 
 # Consumers
