@@ -51,11 +51,12 @@ async def shutdown():
     await database.disconnect()
 
 # Allow your React app to call this backend
+frontend_url = "https://"  + os.getenv("CODESPACE_NAME") + "-3000.app.github.dev"
+logger.info("FRONTEND URL:")
+logger.info(frontend_url)
 origins = [
-    "https://3000-roseyume-tailsofkafka-md4yrcdut1c.ws-us121.gitpod.io/",
-    "http://localhost:3000",   # React dev server
-    "http://127.0.0.1:3000",   # sometimes React uses this
-    "*"                        # (optional, allow all origins - use carefully!)
+    frontend_url,
+    "*"                
 ]
 
 # Cat gossip messages for continuous messaging feature
