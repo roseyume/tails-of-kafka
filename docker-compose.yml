@@ -142,3 +142,25 @@ services:
     volumes:
       - ./data-transfer:/data-transfer
     restart: unless-stopped
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      # Allow explicit override of the API URL
+      VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
+      # Pass Codespaces name and PUBLIC_IP (if present) so the container can construct a browser-reachable URL
+      VITE_CODESPACE_NAME: "${CODESPACE_NAME:-}"
+      PUBLIC_IP: "${PUBLIC_IP:-127.0.0.1}"
+    volumes:
+      - ./frontend:/app

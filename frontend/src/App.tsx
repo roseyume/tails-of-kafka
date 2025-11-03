@@ -22,7 +22,8 @@ const navigation = [
   // { name: 'Schema Registry', icon: Settings, id: 'schema' },
 ];
 
-const apiURL = import.meta.env.VITE_API_BASE_URL;
+const codespaceName = import.meta.env.VITE_CODESPACE_NAME;
+const apiURL = codespaceName ? `https://${codespaceName}-3000.githubpreview.dev` : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api');
 
 
 export default function App() {
