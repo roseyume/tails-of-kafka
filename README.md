@@ -50,15 +50,19 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 
    Prerequisite: a github account is needed and can create created at: https://github.com/
    
-   To start, clone this repo:
+   To begin, start this repo as a codespace:
 
-   Then, start this repo as a codespace:
+   When your codespace has loaded, you should see VScode. In the terminal, run "bash .devcontainer/postStart.sh"
+
+   Once the containers have started successfully, make the kafka dashboard publicly visible and open it in a browser.
+
+   The kafka dashboard is now running! Follow the scenario labs below to start exploring.
 
 ---
 
 ## Tips and Tricks
  - For any values that are not explicitly mentioned in the lab step, use the defaults preset.
- - At the bottom of the producer and consumer tabs, there are Configuration Guide that helps explain some of the configurations that are being set.
+ - At the bottom of the producer and consumer tabs, there are Configuration Guide to help explain some of the configurations.
 
 ## Scenario 1: Getting Started
 
@@ -238,7 +242,7 @@ As a result, the squirrels were able to find the dog digging up the acorns in th
 
 You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
 
-🏅🎖️ You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
+###🏅🎖️ You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
 ---
 
 ## Additional Key Points for Kafka Beginners
