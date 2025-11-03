@@ -1,18 +1,5 @@
-## based on https://github.com/gschmutz/stream-processing-workshop/blob/master/01-environment/docker/docker-compose.yml
 # does not include: Connect, Schema Registry, KSQL
-# relies on environment variable PUBLIC_IP 
-# Prepare Environment Variables
-# set PUBLIC_IP to the IP address on which the local host machine connects to the Docker host
-# - this can be 127.0.0.1 when you run Docker Compose locally or it can be the IP address of the VM inside which you have Docker Compose running or even the Public IP address of the Compute Instance in which you run Docker Compose
 
-
-# =====================================================
-# Platform: default
-# Platform Stack:          derived from trivadis/platys-modern-data-platform
-# Platform Stack Version:  derived from 1.10.0
-# =====================================================
-version: '3.5'
-# enforce some dependencies
 networks:
   default:
     name: streaming-platform
@@ -44,6 +31,12 @@ services:
       - "5432:5432"
     volumes:
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kafkadashboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
   #  ================================== Kafka ========================================== #
   #  latest: confluentinc/cp-server:7.3.3
   kafka-1:
@@ -146,21 +139,33 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    depends_on:
+      - pg-local
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     # Allow explicit override of the API URL
-  #     VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
-  #     # Pass Codespaces name and PUBLIC_IP (if present) so the container can construct a browser-reachable URL
-  #     VITE_CODESPACE_NAME: "${CODESPACE_NAME:-}"
-  #     PUBLIC_IP: "${PUBLIC_IP:-127.0.0.1}"
-  #   volumes:
-  #     - ./frontend:/app
+      - ./:/workspace:delegated
+      - /var/run/docker.sock:/var/run/docker.sock
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      # Allow explicit override of the API URL
+      VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
+      # Pass Codespaces name and PUBLIC_IP (if present) so the container can construct a browser-reachable URL
+      VITE_CODESPACE_NAME: "${CODESPACE_NAME:-}"
+      PUBLIC_IP: "${PUBLIC_IP:-127.0.0.1}"
+      # Ensure Vite binds to all interfaces inside container
+      HOST: "0.0.0.0"
+      # Prevent Vite from trying to open a browser inside the container
+      BROWSER: "none"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+
+volumes:
+  frontend_node_modules: {}

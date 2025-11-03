@@ -56,6 +56,49 @@
     server: {
       port: 3000,
       open: true,
-      allowedHosts: ['localhost', '127.0.0.1','.gitpod.io']
+      allowedHosts: ['localhost', '127.0.0.1','.gitpod.io'],
+      proxy: {
+        // Proxy API calls to the backend container on the docker network
+        '/topics': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/cluster': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/brokers': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/producers': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/consumers': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/partitions': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/produce': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/consume': {
+          target: 'http://backend:8000',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
     },
   });

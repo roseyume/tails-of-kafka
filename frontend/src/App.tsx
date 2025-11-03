@@ -23,7 +23,9 @@ const navigation = [
 ];
 
 const codespaceName = import.meta.env.VITE_CODESPACE_NAME;
-const apiURL = codespaceName ? `https://${codespaceName}-3000.githubpreview.dev` : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api');
+// When running in Codespaces, use a relative path so the Vite dev server can proxy requests
+// to the backend (avoids GitHub tunnel auth redirects). Otherwise use configured API URL or localhost.
+const apiURL = codespaceName ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
 
 
 export default function App() {

@@ -12,6 +12,8 @@ WORKDIR /app
 
 COPY . .
 
+RUN ls -alrt
+
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 EXPOSE 8000

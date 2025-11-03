@@ -53,7 +53,7 @@
             "vite": "^6.3.5"
       },
       "scripts": {
-            "dev": "vite",
+            "dev": "vite --host 0.0.0.0",
             "build": "vite build"
       }
 }

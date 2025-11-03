@@ -33,11 +33,47 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 executor = ThreadPoolExecutor(max_workers=10)
 script_dir = os.path.dirname(os.path.abspath(__file__))
-DOCKER_COMPOSE_FILE = os.path.join(script_dir, "..", "docker-compose.yml")
+
+# Determine where docker-compose.yml lives inside the running container.
+# In development we mount the repository root at /workspace, and the backend
+# service source at /app. Try a few sensible locations and pick the first
+# that exists so file lookups don't fail with FileNotFoundError when the
+# compose file lives at /workspace/docker-compose.yml.
+possible_compose_paths = [
+    os.path.join(script_dir, "..", "docker-compose.yml"),
+    "/workspace/docker-compose.yml",
+    os.path.join(script_dir, "..", "..", "docker-compose.yml"),
+    os.path.abspath("./docker-compose.yml"),
+]
+
+DOCKER_COMPOSE_FILE = next((p for p in possible_compose_paths if os.path.exists(p)), possible_compose_paths[0])
+
+# Make these available to docker_control and other modules; default the
+# docker socket to the unix socket path used by the host mount.
+os.environ.setdefault("DOCKER_COMPOSE_FILE", DOCKER_COMPOSE_FILE)
+os.environ.setdefault("DOCKER_SOCK", "unix:///var/run/docker.sock")
+
+# Import docker control helpers (uses Docker SDK and the DOCKER_COMPOSE_FILE env var)
+from docker_control import start_service_from_compose, stop_service, restart_service, remove_service
 
 @app.on_event("startup")
 async def startup():
-    await database.connect()
+    # Retry connecting to the database with exponential backoff so the container
+    # can start even if Postgres is still initializing.
+    max_attempts = 12
+    delay = 1
+    for attempt in range(1, max_attempts + 1):
+        try:
+            await database.connect()
+            logger.info(f"Connected to database {database.url}")
+            break
+        except Exception as e:
+            logger.error(f"Database connect attempt {attempt}/{max_attempts} failed: {e}")
+            if attempt == max_attempts:
+                logger.error("Exceeded maximum database connection attempts, aborting startup")
+                raise
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 10)
     # asyncio.create_task(db_writer())
 
 @app.on_event("shutdown")
@@ -51,12 +87,17 @@ async def shutdown():
     await database.disconnect()
 
 # Allow your React app to call this backend
-frontend_url = "https://"  + os.getenv("CODESPACE_NAME") + "-3000.app.github.dev"
+codespace = os.getenv("CODESPACE_NAME")
+if codespace:
+    frontend_url = f"https://{codespace}-3000.app.github.dev"
+else:
+    # default to localhost or allow explicit override via VITE_API_BASE_URL
+    frontend_url = os.getenv("VITE_API_BASE_URL", "http://localhost:3000")
 logger.info("FRONTEND URL:")
 logger.info(frontend_url)
 origins = [
     frontend_url,
-    "*"                
+    "*"
 ]
 
 # Cat gossip messages for continuous messaging feature
@@ -97,8 +138,10 @@ logger.info("This will always appear if flush is enabled by default")
 import os
 
 # Allow overriding bootstrap servers via environment variable when running in containers
-BOOTSTRAP_SERVERS = os.getenv("BOOTSTRAP_SERVERS", "localhost:9092, localhost:9093, localhost:9094")
-admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
+# Use AdminManager to manage the bootstrap list and AdminClient lifecycle in a thread-safe way
+from kafka_admin import AdminManager
+initial_bootstrap = os.getenv("BOOTSTRAP_SERVERS", "kafka-1:19092,kafka-2:19093,kafka-3:19094").split(",")
+admin_manager = AdminManager(initial_bootstrap)
 
 # Consumers
 consumers: Dict[str, Consumer] = {}
@@ -117,7 +160,7 @@ producer_metadata: Dict[str, ProducerInfo] = {}
 async def get_cluster_configs():
     try:
         # --- Get cluster metadata to discover brokers ---
-        metadata = admin.list_topics(timeout=10)
+        metadata = admin_manager.get().list_topics(timeout=10)
 
         # Collect broker IDs from replicas (alive + dead)
         broker_ids = [broker.id for broker in metadata.brokers.values()]
@@ -125,9 +168,9 @@ async def get_cluster_configs():
         if not broker_ids:
             raise HTTPException(status_code=500, detail="No brokers found in cluster")
 
-        # --- TODO: Fix this so it accurately gives the global configs ---
+        # --- Get global configs from one broker ---
         cluster_resource = ConfigResource("BROKER", str(broker_ids[0]))
-        cluster_future = admin.describe_configs([cluster_resource])
+        cluster_future = admin_manager.get().describe_configs([cluster_resource])
         global_configs = {}
         try:
             cluster_result = cluster_future[cluster_resource].result()
@@ -144,10 +187,9 @@ async def get_cluster_configs():
 
         # --- Get per-broker configs (loop each broker) ---
         broker_configs = {}
-
         for broker_id in broker_ids:
             res = ConfigResource("BROKER", str(broker_id))
-            future = admin.describe_configs([res])
+            future = admin_manager.get().describe_configs([res])
 
             configs = {}
             try:
@@ -164,11 +206,10 @@ async def get_cluster_configs():
             broker_configs[broker_id] = configs
 
         return {
-            "bootstrap_servers": BOOTSTRAP_SERVERS,
-            "global_configs": global_configs,  # from broker 0
+            "bootstrap_servers": admin_manager.bootstrap_str(),
+            "global_configs": global_configs,
             "brokers": broker_configs,
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch cluster configs: {e}")
 
@@ -184,7 +225,7 @@ async def update_cluster_config(req: ClusterConfigRequest):
         # Apply configs to the cluster (broker resource type = BROKER = 4)
         # Passing `broker_id=0` means "apply to the default broker config for all brokers"
         resource = ConfigResource("BROKER", "0", config)
-        futures = admin.alter_configs([resource])
+        futures = admin_manager.get().alter_configs([resource])
 
         # Wait for completion
         for r, f in futures.items():
@@ -200,7 +241,7 @@ async def update_cluster_config(req: ClusterConfigRequest):
 @app.get("/brokers", response_model=List[Broker])
 async def get_brokers():
     try:
-        metadata = admin.list_topics(timeout=5)
+        metadata = admin_manager.get().list_topics(timeout=5)
         nodes = []
         controller_id = metadata.controller_id
 
@@ -253,12 +294,18 @@ async def get_brokers():
     except Exception as e:
         return get_stopped_brokers()
 
-def get_stopped_brokers(file_path=DOCKER_COMPOSE_FILE):
-    """
-    Reads docker-compose.yml, extracts Kafka brokers, and returns a list of Broker objects
+def get_stopped_brokers(file_path: str | None = None):
+    """Read docker-compose.yml, extract Kafka brokers, and return Broker objects
     with status='stopped' for brokers assumed stopped.
-    
+
+    The file_path parameter defaults to the environment-configured `DOCKER_COMPOSE_FILE`
+    so we avoid binding a stale path at function definition time.
     """
+    file_path = file_path or os.environ.get("DOCKER_COMPOSE_FILE", DOCKER_COMPOSE_FILE)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=500, detail=f"docker-compose file not found: {file_path}")
+
     with open(file_path, "r") as f:
         compose = yaml.safe_load(f)
 
@@ -340,16 +387,16 @@ async def create_broker():
             "hostname": service_name,
             "depends_on": ["zookeeper-1"],
             "ports": [
-                f"{9092+broker_id}:{9093+broker_id}",
-                f"{29092+broker_id}:{29093+broker_id}",
-                f"{9992+broker_id}:{9993+broker_id}"
+                f"{9091+broker_id}:{9091+broker_id}",
+                f"{29091+broker_id}:{29091+broker_id}",
+                f"{9991+broker_id}:{9991+broker_id}"
             ],
             "environment": {
                 "KAFKA_BROKER_ID": f"{broker_id}",
-                "KAFKA_BROKER_RACK": f"{"r" + str(broker_id)}",
+                "KAFKA_BROKER_RACK": f"r{broker_id}",
                 "KAFKA_ZOOKEEPER_CONNECT": "zookeeper-1:2181",
-                "KAFKA_LISTENERS": f"LISTENER_INTERNAL://{service_name}:{19093+broker_id},LISTENER_DOCKERHOST://{service_name}:{29093+broker_id},LISTENER_EXTERNAL://{service_name}:{9093+broker_id}",
-                "KAFKA_ADVERTISED_LISTENERS": f"LISTENER_INTERNAL://{service_name}:{19093+broker_id},LISTENER_DOCKERHOST://localhost:{29093+broker_id},LISTENER_EXTERNAL://${{PUBLIC_IP:-127.0.0.1}}:{9093+broker_id}",
+                "KAFKA_LISTENERS": f"LISTENER_INTERNAL://{service_name}:{19091+broker_id},LISTENER_DOCKERHOST://{service_name}:{29091+broker_id},LISTENER_EXTERNAL://{service_name}:{9091+broker_id}",
+                "KAFKA_ADVERTISED_LISTENERS": f"LISTENER_INTERNAL://{service_name}:{19091+broker_id},LISTENER_DOCKERHOST://localhost:{29091+broker_id},LISTENER_EXTERNAL://${{PUBLIC_IP:-127.0.0.1}}:{9091+broker_id}",
                 "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "LISTENER_INTERNAL:PLAINTEXT,LISTENER_DOCKERHOST:PLAINTEXT,LISTENER_EXTERNAL:PLAINTEXT",
                 "KAFKA_INTER_BROKER_LISTENER_NAME": "LISTENER_INTERNAL",
                 "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": 3,
@@ -374,13 +421,20 @@ async def create_broker():
         with open(DOCKER_COMPOSE_FILE, "w") as f:
             yaml.dump(compose_data, f, default_flow_style=False)
 
+        # Start the service using the Docker SDK helper to avoid shelling out.
         try:
-            subprocess.run(["docker-compose", "up", "-d", service_name], check=True)
-        except subprocess.CalledProcessError as e:
+            loop = asyncio.get_running_loop()
+            # run in executor so we don't block the event loop
+            await loop.run_in_executor(None, start_service_from_compose, service_name)
+        except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to start broker: {e}")
 
-        BOOTSTRAP_SERVERS.append("localhost:" + str(29093+broker_id))
-        admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
+        # Add the new broker to our in-memory bootstrap list (avoid duplicates)
+        new_entry = f"localhost:{19091+broker_id}"
+        try:
+            admin_manager.add(new_entry)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update bootstrap list: {e}")
 
         return {"status": "success", "broker": await get_brokers()}
     except Exception as e:
@@ -439,9 +493,16 @@ async def stop_broker(broker_id: int):
     service_name = find_service_name(broker_id)
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
-    await run_compose_command(2, "stop", service_name)
-
-    return {"status": "stopped", "service_name": service_name, "broker": await get_brokers()}
+    try:
+        loop = asyncio.get_running_loop()
+        stopped = await loop.run_in_executor(None, stop_service, service_name)
+        if not stopped:
+            raise HTTPException(status_code=500, detail=f"Failed to stop service {service_name}")
+        return {"status": "stopped", "service_name": service_name, "broker": await get_brokers()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/brokers/restart/{broker_id}")
@@ -450,9 +511,16 @@ async def restart_broker(broker_id: int):
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
 
-    await run_compose_command(10, "restart", service_name)
-    
-    return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
+    try:
+        loop = asyncio.get_running_loop()
+        restarted = await loop.run_in_executor(None, restart_service, service_name)
+        if not restarted:
+            raise HTTPException(status_code=500, detail=f"Failed to restart service {service_name}")
+        return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/brokers/delete/{broker_id}")
@@ -461,10 +529,17 @@ async def delete_broker(broker_id: int):
     if not service_name:
         raise HTTPException(status_code=404, detail=f"Broker {broker_id} not found")
 
-    # Stop the container first
-    await run_compose_command(1, "stop", service_name)
-    # Remove the container
-    await run_compose_command(1, "rm", "-f", service_name)
+    try:
+        loop = asyncio.get_running_loop()
+        stopped = await loop.run_in_executor(None, stop_service, service_name)
+        removed = await loop.run_in_executor(None, remove_service, service_name)
+        if not (stopped or removed):
+            # if neither stopped nor removed, report failure
+            raise HTTPException(status_code=500, detail=f"Failed to remove service {service_name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     # Optionally: remove the service from docker-compose.yml
     with open(DOCKER_COMPOSE_FILE, "r") as f:
@@ -475,6 +550,14 @@ async def delete_broker(broker_id: int):
     with open(DOCKER_COMPOSE_FILE, "w") as f:
         yaml.dump(compose_data, f, default_flow_style=False)
 
+    # Remove the broker's advertised bootstrap entry if present and recreate admin client
+    try:
+        entry = f"localhost:{19091+broker_id}"
+        # delegate removal and admin recreation to AdminManager
+        admin_manager.remove(entry)
+    except Exception as e:
+        logger.warning(f"Failed to update bootstrap list after deletion: {e}")
+
     time.sleep(1)
     return {"status": "deleted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
 
@@ -482,7 +565,7 @@ def get_topic_config(topic_name: str):
     """Fetch topic config like retention.ms"""
     resource = ConfigResource("topic", topic_name)
     try:
-        configs = admin.describe_configs([resource])
+        configs = admin_manager.get().describe_configs([resource])
         cfg = configs[resource].result()
         retention_entry = cfg.get("retention.ms")
         if retention_entry is not None and retention_entry.value is not None:
@@ -505,7 +588,7 @@ def format_bytes(size_in_bytes: int) -> str:
 @app.get("/topics", response_model=list[Topic])
 def list_topics():
     try:
-        metadata = admin.list_topics(timeout=10)
+        metadata = admin_manager.get().list_topics(timeout=10)
         topics = []
 
         for topic_name, topic in metadata.topics.items():
@@ -540,7 +623,7 @@ def create_topic(req: TopicRequest):
         config={"retention.ms": str(retention_ms)}
     )
 
-    fs = admin.create_topics([new_topic])
+    fs = admin_manager.get().create_topics([new_topic])
 
     for topic_name, f in fs.items():
         try:
@@ -551,12 +634,12 @@ def create_topic(req: TopicRequest):
 
 def topic_has_active_consumers(topic_name: str) -> bool:
     """Return True if any consumer group is actively consuming from the topic."""
-    groups = admin.list_consumer_groups(request_timeout=10).result()
+    groups = admin_manager.get().list_consumer_groups(request_timeout=10).result()
     group_ids = [group.group_id for group in groups.valid]
     if len(group_ids) == 0:
         return False
 
-    group_metadata = admin.describe_consumer_groups(group_ids, request_timeout=10)
+    group_metadata = admin_manager.get().describe_consumer_groups(group_ids, request_timeout=10)
     for group_id, meta in group_metadata.items():
         try:
             group_desc = meta.result()
@@ -572,8 +655,8 @@ def topic_has_active_consumers(topic_name: str) -> bool:
 async def delete_topic(topic_name: str):
     """Delete a Kafka topic after checking for active consumers."""
     try:
-        metadata = admin.list_topics(timeout=10)
-  
+        metadata = admin_manager.get().list_topics(timeout=10)
+
         if not (topic_name in metadata.topics.keys()):
             return list_topics()
 
@@ -583,7 +666,7 @@ async def delete_topic(topic_name: str):
                 detail=f"Topic '{topic_name}' has active consumers. Stop them before deleting.",
             )
 
-        futures = admin.delete_topics([topic_name])
+        futures = admin_manager.get().delete_topics([topic_name])
         futures[topic_name].result()
 
         return list_topics()
@@ -595,7 +678,7 @@ async def delete_topic(topic_name: str):
 
 @app.post("/partitions")
 def add_partitions(req: PartitionsRequest):
-    fs = admin.create_partitions({req.name: NewPartitions(total_count=req.additional_partitions)}, request_timeout=15)
+    fs = admin_manager.get().create_partitions({req.name: NewPartitions(total_count=req.additional_partitions)}, request_timeout=15)
     for topic, f in fs.items():
         try:
             f.result()
@@ -609,7 +692,7 @@ async def list_partitions():
     unassigned = []
     consumer_groups = []
     try:
-        groups = admin.list_consumer_groups(request_timeout=10).result()
+        groups = admin_manager.get().list_consumer_groups(request_timeout=10).result()
         group_ids = [group.group_id for group in groups.valid]
         if len(group_ids) == 0:
             return {
@@ -617,17 +700,17 @@ async def list_partitions():
                 "unassignedConsumers": unassigned,
                 "consumerGroups": consumer_groups
             }
-        group_descriptions = admin.describe_consumer_groups(group_ids, request_timeout = 10)
+        group_descriptions = admin_manager.get().describe_consumer_groups(group_ids, request_timeout = 10)
         for group_id in group_ids:
             curr_assigned = []
             # Get committed offsets for group
             group = group_descriptions[group_id].result()
             group_spec = ConsumerGroupTopicPartitions(group_id, None) 
-            group_offsets = admin.list_consumer_group_offsets([group_spec])[group_id].result()
+            group_offsets = admin_manager.get().list_consumer_group_offsets([group_spec])[group_id].result()
  
             # Get all topics this group is consuming
             topics = list({topic_partition.topic for topic_partition in group_offsets.topic_partitions})
-            topic_metadata = admin.list_topics(timeout=10)
+            topic_metadata = admin_manager.get().list_topics(timeout=10)
             group_members = group.members
 
             for member in group_members:
@@ -709,7 +792,7 @@ async def create_consumer(req: ConsumerInfo):
     # Kafka consumer configuration
     conf = {
         "client.id" : req.name,
-        "bootstrap.servers": BOOTSTRAP_SERVERS,  # default, could be extended to frontend
+        "bootstrap.servers": admin_manager.bootstrap_str(),  # default, could be extended to frontend
         "group.id": req.groupId,
         "auto.offset.reset": req.autoOffsetReset,
         "enable.auto.commit": req.enableAutoCommit,
@@ -718,7 +801,7 @@ async def create_consumer(req: ConsumerInfo):
 
     try:
         kafka_consumer = Consumer(conf)
-        metadata = admin.list_topics(timeout=5)
+        metadata = admin_manager.get().list_topics(timeout=5)
         topic_meta = metadata.topics[req.topics[0]]
         total_messages = 0
         for partition_id, partition_meta in topic_meta.partitions.items():
@@ -909,7 +992,7 @@ def create_producer(req: ProducerConfigRequest):
         )
 
     producers[req.name] = ProducerTracker(req.name, {
-        "bootstrap.servers": BOOTSTRAP_SERVERS,
+        "bootstrap.servers": admin_manager.bootstrap_str(),
         "acks": req.acks,
         "batch.size": req.batchSize,  
         "linger.ms": req.lingerMs,
@@ -941,7 +1024,7 @@ def update_producer(req: ProducerConfigRequest):
         producers[req.name].flush()
 
     producers[req.name] = ProducerTracker(req.name, {
-        "bootstrap.servers": BOOTSTRAP_SERVERS,
+        "bootstrap.servers": admin_manager.bootstrap_str(),
         "acks": req.acks,
         "batch.size": req.batchSize,  
         "linger.ms": req.lingerMs,

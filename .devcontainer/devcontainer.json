@@ -4,7 +4,7 @@
     "customizations": {
       "settings": {
         "terminal.integrated.defaultProfile.linux": "bash"
-      },
+      }
     },
   
     "features": {
@@ -15,8 +15,11 @@
       "8000": { "label": "FastAPI", "onAutoForward": "notify" },
       "3000": { "label": "Frontend", "onAutoForward": "openPreview" }
     },
-
   
-    "forwardPorts": [8000, 3000, 5432, 2181, 2188, 9092, 9093, 9094, 9992, 9993, 9994, 8081]
+      "forwardPorts": [8000, 3000, 5432, 2181, 2188, 9092, 9093, 9094, 9992, 9993, 9994, 8081],
+
+      // Run on every Codespace start. It's non-destructive and only prints a reminder
+      // to make forwarded ports public in the Codespaces Ports panel.
+      "postStartCommand": "echo 'Reminder: ports 8000 (backend) and 3000 (frontend) are forwarded to the Codespace. To expose them publicly, open the Ports panel and set visibility to Public.'"
   }
   
