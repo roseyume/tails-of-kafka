@@ -3,10 +3,7 @@
 cp backup/docker-compose.bkup docker-compose.yml
 
 echo "Starting Docker services..."
-docker compose up -d &
-
-echo "Waiting for Kafka to get ready..."
-docker compose ps
+docker compose up -d
 
 
 # echo "Starting backend and frontend containers via docker compose..."
