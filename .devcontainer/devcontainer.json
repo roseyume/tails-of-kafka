@@ -1,9 +1,5 @@
 {
     "name": "Tails of Kafka",
-    "dockerComposeFile": ["../docker-compose.yml"],
-    "service": "backend",
-    "workspaceFolder": "/app",
-
   
     "customizations": {
       "settings": {
