@@ -1,4 +1,4 @@
-# 🐾 Tails of Kafka: How Pets Stream the Tea
+# Tails of Kafka: How Pets Stream the Tea
 
 Welcome to the companion repo for the Grace Hopper Celebration workshop:  
 **Tails of Kafka: How Pets Stream the Tea**
@@ -7,7 +7,25 @@ This beginner-friendly session uses a lighthearted pet gossip metaphor to teach 
 
 ---
 
-## 📚 What You'll Learn
+## Table of Contents
+- [What You'll Learn](#what-youll-learn)
+- [Metaphor Overview](#metaphor-overview)
+- [Kafka Setup](#kafka-setup)
+- [Tips and Tricks](#tips-and-tricks)
+- [Scenario 1: Getting Started](#scenario-1-getting-started)
+- [Scenario 2: Consume Your First Message](#scenario-2-consume-your-first-message)
+- [Scenario 3: Late to the news!](#scenario-3-late-to-the-news)
+- [Scenario 4: Scaling the Pet Gossip](#scenario-4-scaling-the-pet-gossip)
+- [Scenario 5: Bad Server](#scenario-5-bad-server)
+- [Scenario 6: Topic Design](#scenario-6-topic-design)
+- [Scenario 7: Consumer Crash](#scenario-7-consumer-crash)
+- [Scenario 8: Consumer Group Chaos](#scenario-8-consumer-group-chaos)
+- [Scenario 9: Missing out on the latest gossip!](#scenario-9-missing-out-on-the-latest-gossip)
+- [Additional Key Points for Kafka Beginners](#additional-key-points-for-kafka-beginners)
+
+---
+
+## What You'll Learn
 
 - What Apache Kafka is and why it matters
 - Core Kafka concepts: producers, topics, consumers, partitions, offsets
@@ -16,38 +34,33 @@ This beginner-friendly session uses a lighthearted pet gossip metaphor to teach 
 
 ---
 
-## 🐾 Metaphor Overview
+## Metaphor Overview
 
 In this workshop, think of Kafka like a neighborhood pet gossip system:
 
-- 🐱 Cats watch and collect neighborhood updates (producers)
-- 🗂️ Gossip goes to categories like `YardDrama` or `KitchenCrimes` (topics)
-- 🐶 Neighborhood animals read the gossip (consumers)
-- 🧠 Kafka organizes and remembers everything
+- Cats watch and collect neighborhood updates (producers)
+- Gossip goes to categories like `YardDrama` or `KitchenCrimes` (topics)
+- Neighborhood animals read the gossip (consumers)
+- Kafka organizes and remembers everything
 
 ---
 
-## 🛠️ Kafka Setup
-   For the purpose of this workshop, a kafka dashboard application has been provisioned on top of the running Apache Kafka to help explore how parts of kafka are configured together for different scenarios. Note that this application is not full fledged and is only intended for learning purposes. The application, its parts and the apache kafka servers are spun up inside the Gitpod workspace through the docker-compose.yml file to serve the kafka dashboard that we will be running the workshop from.
+## Kafka Setup
+   For the purpose of this workshop, a kafka dashboard application has been provisioned on top of the running Apache Kafka to help explore how parts of kafka are configured together for different scenarios. Note that this application is not full fledged and is only intended for learning purposes. The application, its parts and the apache kafka servers are spun up inside the Github codespace through the docker-compose.yml file to serve the kafka dashboard that we will be running the workshop from.
 
    Prerequisite: a github account is needed and can create created at: https://github.com/
    
-   To start, navigate to: https://gitpod.io/# and login with your github account
-   <img width="932" height="476" alt="image" src="https://github.com/user-attachments/assets/e81d38f9-efd4-48d2-8571-7421d4852bf9" />
+   To start, clone this repo:
 
-   Then, "Configure your own repository"
-   <img width="3198" height="1611" alt="image" src="https://github.com/user-attachments/assets/6f8a3fcf-5d27-4690-b34b-2515eb035e60" />
-
-   And Copy this repo's link (https://github.com/roseyume/tails-of-kafka) into the "Select a Repository" box
-   <img width="1713" height="1245" alt="image" src="https://github.com/user-attachments/assets/86452107-3e03-4d25-b754-1547c2f9c2bd" />
+   Then, start this repo as a codespace:
 
 ---
 
 ## Tips and Tricks
- - For any values that are not explicitly mentioned in the lab step, leave as default.
- - Also, at the bottom of both the Producer and the Consumer tabs, there is a Configuration Guide that helps explain some of the configurations that are being set.
+ - For any values that are not explicitly mentioned in the lab step, use the defaults preset.
+ - At the bottom of the producer and consumer tabs, there are Configuration Guide that helps explain some of the configurations that are being set.
 
-## 👉 Scenario 1: Getting Started
+## Scenario 1: Getting Started
 
 “Hey, Pixie. Did you see? There's a new cat next door” ~ Buddy
 
@@ -59,11 +72,11 @@ Objective: Understand the basic flow of producing messages in Kafka.
 - Create a topic 'NeighborhoodUpdates" with a partition of 1
 - Create a producer 'Buddy' configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Topic Management" section of the dashboard, your newly created topic should appear.
  - The "Producer Management" area should display your producer, and the number of messages sent should be greater than 0
 
-## 📦 Scenario 2: Consume Your First Message
+## Scenario 2: Consume Your First Message
 
 What Is a Consumer in Kafka?
 A consumer reads messages from a topic. It can start from the earliest or latest message depending on the offset configuration. 
@@ -74,20 +87,20 @@ Objective: Learn how messages flow from the topic to a consumer.
 
 - Create a consumer 'Pixie' configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'. 
 
-# ✅ Check Your Work
+### Check Your Work
  - The "Consumed Messages" panel should show all the messages produced to the topic 'NeighborhoodUpdates. 
 
-## 📦 Scenario 3: Late to the news!
+## Scenario 3: Late to the news!
 “Oh! Oh! Me too! I want to get the neighborhood gossip!” ~ Sammy
 
 Objective: Learn how offset configurations can impact initial message consumption
 
 - Create another consumer 'Sammy' configured for topic 'NeighborhoodUpdates in the consumer group 'dog-consumers' and auto offset reset 'latest'
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Consumed Messages" table, you should notice that Sammy missed previous messages that were sent.
 
-## 📦 Scenario 4: Scaling the Pet Gossip
+## Scenario 4: Scaling the Pet Gossip
 
 “Pet gossip has gone viral. One partition isn’t enough!”
 
@@ -104,11 +117,11 @@ Objective: Partitioning enables parallelism, allowing you to produce and consume
 - Create 2 producers configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
 - Recreate the consumer 'Pixie'
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Partition Assignments" table, you should notice that Pixie has been assigned to all 6 partitions. 
 
-## 📦 Scenario 5: Bad Server
-"There were bugs in the server so I helped take care of them 😊" ~ Buddy
+## Scenario 5: Bad Server
+"There were bugs in the server so I helped take care of them" ~ Buddy
 
 To ensure high availability and fault tolerance, Kafka uses replication. Each partition has:
 
@@ -117,7 +130,7 @@ Followers (Replicas): other brokers that replicate the leader’s data.
 
 When a leader broker fails, one of the in-sync followers (ISRs) can be automatically promoted to leader.
 
-🔑 Why Leader Replication Helps Guarantee Resiliency
+Why Leader Replication Helps Guarantee Resiliency
 
 High Availability: If the leader broker crashes, the system automatically elects a follower as the new leader, ensuring the topic remains available.
 
@@ -134,10 +147,10 @@ Objective: Understand how Kafka uses replication to continue processing without 
 
 **Hint:** Ensure a replication factor > 1 on the broker and `acks=all` on the producer.
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Partition Assignments" table, you should notice that the broker that failed is not the Leader Broker for any of the partitions.
 
-## 📦 Scenario 6: Topic Design
+## Scenario 6: Topic Design
 
 "I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Pixie
 
@@ -149,10 +162,10 @@ Objective: Learn topic categorization and multi-topic consumption.
 - Delete the 'NeighborhoodUpdates' topic and create 3 new ones 'YardDrama', 'IndoorCrimes' and 'ParkUpdates'.
 - Create producers to each and recreate the consumer 'Pixie'. Subscribe Pixie to just 2 of the topics.
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Consumed Messages" for Pixie, only messages produced to the 2 topics Pixie is subscribed to should appear.
 
-## 📦 Scenario 7: Consumer Crash
+## Scenario 7: Consumer Crash
 
 "I'm going to take a nap for a little while..." ~ Pixie
 
@@ -183,12 +196,10 @@ Objective: Understand how offset management prevents data duplication and data l
 - Send messages to one of the topics Pixie was subscribed too
 - Restart Pixie and confirm that Pixie received all messaged that were sent while she was sleeping
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Consumed Messages" for Pixie, all messages produced while asleep should appear.
 
-https://roseyume-tailsofkafka-f5ktysc7j0n.ws-us121.gitpod.io/
-
-## 👯‍♀️ Scenario 8: Consumer Group Chaos
+## Scenario 8: Consumer Group Chaos
 
 “A group of squirrels are out to quickly find out which dog has been digging holes in the neighborhood park, using the cat's gossip boards. But they’re hearing duplicate stories!”
 
@@ -200,10 +211,10 @@ Objective:
 
 - Create 3 squirrel consumers to read the news across all the topics and group them into the same consumer group to evenly divide the work.
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Partition Assignments" table, you should notice that the squirrels split up the partitions between themselves. 
 
-## 💥 Scenario 9: Missing out on the latest gossip!
+## Scenario 9: Missing out on the latest gossip!
 
 “Squirrel 3's listener crashed! That's so much gossip to go through again!”
 
@@ -214,16 +225,37 @@ Objective:
  - Stop Squirrel1 and observe how the partitions are redistributed among the remaining squirrels.
  - Restart Squirrel1 and observe how the partitions are reassigned again.
 
-# ✅ Check Your Work
+### Check Your Work
  - In the "Partition Assignments" table, you should notice that the squirrels split up the partitions were adjusted when the squirrel was turned off and once again when it was turned on.
 
-## 🧶 Cat Gossip Central has brought justice to the squirrel community
+---
+
+## Cat Gossip Central has brought justice to the squirrel community
 
 You’ve turned chaos into cadence.
 Consumers know where they left off. Producers don’t over-share. Everyone knows what happened, who it happened to, and when it was published.
 As a result, the squirrels were able to find the dog digging up the acorns in the park.
 
+You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
+
 🏅🎖️ You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
+---
+
+## Additional Key Points for Kafka Beginners
+
+### Synchronous vs. Asynchronous Messaging
+Kafka is designed for asynchronous messaging, where producers send messages without waiting for consumers to process them. This is different from traditional message queues, which often use synchronous messaging. Kafka's asynchronous model allows for high throughput and scalability, making it ideal for real-time data streaming.
+
+### When to Use Kafka
+Kafka is a great choice for:
+- processing large volumes of data in real-time.
+- decoupling producers and consumers for better scalability.
+- handling fault tolerance and durability for your data streams.
+- handling event-driven architectures or log aggregation.
+
+However, you might consider message queues or pub/sub services for:
+- Small-scale applications with low data volume.
+- Scenarios requiring strict message ordering across all partitions.
+- Use cases where latency is more critical than throughput.
 
 
-https://roseyume-tailsofkafka-f5ktysc7j0n.ws-us121.gitpod.io/ 
