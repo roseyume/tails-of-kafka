@@ -51,22 +51,25 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    Prerequisite: a github account is needed and can create created at: https://github.com/
    
    To begin, start this repo as a codespace:
-   <img width="1440" height="811" alt="Desktop - 1" src="https://github.com/user-attachments/assets/9ec1ac4a-66f0-4bd5-bc4d-0b556e6bd090" />
-   <img width="1440" height="811" alt="Desktop - 4" src="https://github.com/user-attachments/assets/31792812-370e-4bb0-988e-5b07319ce561" />
+   <img width="960" height="540" alt="Desktop - 1" src="https://github.com/user-attachments/assets/9ec1ac4a-66f0-4bd5-bc4d-0b556e6bd090" />
+   <img width="960" height="540" alt="Desktop - 4" src="https://github.com/user-attachments/assets/31792812-370e-4bb0-988e-5b07319ce561" />
 
-   When your codespace has loaded, you should see VScode. In the terminal, run "bash .devcontainer/postStart.sh"
-   <img width="1440" height="811" alt="Desktop - 2" src="https://github.com/user-attachments/assets/b84a9db8-6112-4689-adf8-84adb8cb6ad2" />
+   When your codespace has loaded, you should see VScode. In the terminal, run 
+   ```bash .devcontainer/postStart.sh```
+   <img width="960" height="540" alt="Desktop - 2" src="https://github.com/user-attachments/assets/b84a9db8-6112-4689-adf8-84adb8cb6ad2" />
 
    Once the containers have started successfully, make the kafka dashboard publicly visible and open it in a browser.
-   <img width="1440" height="811" alt="Desktop - 3" src="https://github.com/user-attachments/assets/9d4e3f64-2677-4634-9fde-0f29993959b2" />
+   <img width="960" height="540" alt="Desktop - 3" src="https://github.com/user-attachments/assets/9d4e3f64-2677-4634-9fde-0f29993959b2" />
 
-   The kafka dashboard is now running! Follow the scenario labs below to start exploring.
+   The kafka dashboard is now running! Follow the lab scenarios below to start exploring.
 
 ---
 
 ## Tips and Tricks
  - For any values that are not explicitly mentioned in the lab step, use the defaults preset.
  - At the bottom of the producer and consumer tabs, there are Configuration Guide to help explain some of the configurations.
+   
+---
 
 ## Scenario 1: Getting Started
 
