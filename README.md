@@ -46,7 +46,7 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 ---
 
 ## Kafka Setup
-   For the purpose of this workshop, a kafka dashboard application has been provisioned on top of the running Apache Kafka to help explore how parts of kafka are configured together for different scenarios. Note that this application is not full fledged and is only intended for learning purposes. The application, its parts and the apache kafka servers are spun up inside the Github codespace through the docker-compose.yml file to serve the kafka dashboard that we will be running the workshop from.
+   For the purpose of this workshop, a kafka dashboard application has been provisioned on top of a backend api connected to the kafka brokers and a zookeeper (coordinator between kafka brokers) to allow us to focus on the basics of kafka in different scenarios. These parts are spun up inside the Github codespace through a docker-compose.yml file. Note that this application is not full fledged and is only intended for learning purposes.
 
    Prerequisite: A github account. If you do not have one, sign up in the top right corner.
    
@@ -57,9 +57,9 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    <img width="960" height="540" alt="Desktop - 4" src="https://github.com/user-attachments/assets/31792812-370e-4bb0-988e-5b07319ce561" /><br><br>
    
    > [!NOTE]
-   > If your codespace does not start:
-   >    - Check for other running codespaces and stop them.
-   >    - Check your github codespace billing. The free tier provides 15 GB and 120 core hours per month.
+   > If your codespace does not start and you have other codespaces:
+   >    - Check your other codespaces and stop them if they are running. 
+   >    - Check your github codespace billing. The free tier provides 15 GB and 120 core hours per month. 
 
 
 
