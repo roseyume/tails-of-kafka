@@ -51,7 +51,7 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    Prerequisite: A github account. If you do not have one, sign up in the top right corner.
    
    To begin, start this repo as a codespace:
-   
+
    <img width="960" height="540" alt="Desktop - 1" src="https://github.com/user-attachments/assets/9ec1ac4a-66f0-4bd5-bc4d-0b556e6bd090" /><br><br>
    
    <img width="960" height="540" alt="Desktop - 4" src="https://github.com/user-attachments/assets/31792812-370e-4bb0-988e-5b07319ce561" /><br><br>
@@ -59,7 +59,7 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    > [!NOTE]
    > If your codespace does not start and you have other codespaces:
    >    - Check your other codespaces and stop them if they are running. 
-   >    - Check your github codespace billing. The free tier provides 15 GB and 120 core hours per month. 
+   >    - Check your github codespace billing. The free tier provides 15 GB and 120 core hours per month.
 
 
 
@@ -162,18 +162,17 @@ Objective: Partitioning enables parallelism, allowing you to produce and consume
 
 <br>
 
-To ensure high availability and fault tolerance, Kafka uses replication. Each partition has:
+To ensure high availability and fault tolerance, Kafka uses replication. Each partition is assigned:
 
-- Leader: the broker responsible for handling all reads and writes for the partition. 
+- Leader: the broker responsible for handling all reads and writes for the partition for data consistency. 
 - Followers (Replicas): other brokers that replicate the leader’s data.
 
-When a leader broker fails, one of the in-sync followers (ISRs) can be automatically promoted to leader.
+This means data sent to this partition is sent to the assigned leader broker who then passes on the new message to the assigned followers. 
+When a leader broker fails, one of the in-sync followers (ISRs) can be automatically promoted to leader since they also have a copy of the data.
 
-Why Leader Replication Helps Guarantee Resiliency:
+Leader Replication Helps Guarantee...
 - High Availability: If the leader broker crashes, the system automatically elects a follower as the new leader, ensuring the topic remains available.
-- Durability: Messages are written to multiple brokers, protecting against data loss if one broker fails.
-- Scalability with Safety: Producers and consumers always talk to the leader, but followers keep an up-to-date copy, balancing efficiency with reliability.
-- Consistency: With the min.insync.replicas configuration, Kafka guarantees that writes are acknowledged by a certain number of replicas, reducing risk of data loss during failures.
+- Consistency and Durability: With the min.insync.replicas configuration, Kafka guarantees that writes are acknowledged by a certain number of replicas, reducing risk of data loss during failures.
 
 Objective: Understand how Kafka uses replication to continue processing without downtime.
 
@@ -291,10 +290,13 @@ You built Pet Gossip Central into a reliable stream of furry truth. Kafka would 
 
 ## Additional Key Points for Kafka Beginners
 
-### Synchronous vs. Asynchronous Messaging
+<details> 
+<summary>Synchronous vs. Asynchronous Messaging</summary> 
 Kafka is designed for asynchronous messaging, where producers send messages without waiting for consumers to process them. This is different from traditional message queues, which often use synchronous messaging. Kafka's asynchronous model allows for high throughput and scalability, making it ideal for real-time data streaming.
+</details>
 
-### When to Use Kafka
+<details>
+<summary>When to Use Kafka</summary>
 Kafka is a great choice for:
 - processing large volumes of data in real-time.
 - decoupling producers and consumers for better scalability.
@@ -305,5 +307,7 @@ However, you might consider message queues or pub/sub services for:
 - Small-scale applications with low data volume.
 - Scenarios requiring strict message ordering across all partitions.
 - Use cases where latency is more critical than throughput.
+
+</details>
 
 
