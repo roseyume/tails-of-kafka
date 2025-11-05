@@ -2,6 +2,8 @@
 
 cp backup/docker-compose.bkup docker-compose.yml
 
+sudo chmod 666 /var/run/docker.sock
+
 echo "Starting Docker services..."
 docker compose up -d
 

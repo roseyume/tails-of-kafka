@@ -9,6 +9,14 @@ import logging
 import sys
 import docker.api
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,   # ensure logs go to stdout (Gitpod picks this up)
+)
+
+logger = logging.getLogger(__name__)
+
 DOCKER_SOCK = os.getenv("DOCKER_SOCK", "unix:///var/run/docker.sock")
 COMPOSE_FILE = os.getenv("DOCKER_COMPOSE_FILE", "./docker-compose.yml")
 
@@ -21,6 +29,7 @@ def get_client():
         return DockerClient(base_url=DOCKER_SOCK)
     except Exception as e:
         logger.error(e)
+        raise e
 
 
 def _parse_ports(ports_list):

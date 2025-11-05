@@ -10,9 +10,9 @@ This beginner-friendly session uses a lighthearted pet gossip metaphor to teach 
 ## Table of Contents
 - [What You'll Learn](#what-youll-learn)
 - [Metaphor Overview](#metaphor-overview)
-- [Kafka Setup](#kafka-setup)
+- [Getting Started](#getting-started)
 - [Tips and Tricks](#tips-and-tricks)
-- [Scenario 1: Getting Started](#scenario-1-getting-started)
+- [Scenario 1: Getting Pet Gossip Started](#scenario-1-getting-pet-gossip-started)
 - [Scenario 2: Consume Your First Message](#scenario-2-consume-your-first-message)
 - [Scenario 3: Late to the news!](#scenario-3-late-to-the-news)
 - [Scenario 4: Scaling the Pet Gossip](#scenario-4-scaling-the-pet-gossip)
@@ -45,7 +45,7 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 
 ---
 
-## Kafka Setup
+## Getting Started
    For the purpose of this workshop, a kafka dashboard application has been provisioned on top of a backend api connected to the kafka brokers and a zookeeper (coordinator between kafka brokers) to allow us to focus on the basics of kafka in different scenarios. These parts are spun up inside the Github codespace through a docker-compose.yml file. Note that this application is not full fledged and is only intended for learning purposes.
 
    Prerequisite: A github account. If you do not have one, sign up in the top right corner.
@@ -54,10 +54,12 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 
    <img width="960" height="540" alt="Desktop - 1" src="https://github.com/user-attachments/assets/9ec1ac4a-66f0-4bd5-bc4d-0b556e6bd090" /><br><br>
    
+   It's recommended to configure to the US-EAST server region and 4-cores for best performance:
+
    <img width="960" height="540" alt="Desktop - 4" src="https://github.com/user-attachments/assets/31792812-370e-4bb0-988e-5b07319ce561" /><br><br>
    
-   > [!NOTE]
-   > If your codespace does not start and you have other codespaces:
+   >[!NOTE]
+   > If your codespace does not start and you have other codespaces on this github account:
    >    - Check your other codespaces and stop them if they are running. 
    >    - Check your github codespace billing. The free tier provides 15 GB and 120 core hours per month.
 
@@ -68,16 +70,15 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    
    <img width="960" height="540" alt="Desktop - 2" src="https://github.com/user-attachments/assets/b84a9db8-6112-4689-adf8-84adb8cb6ad2" /><br>
 
-   
-   > [!NOTE]
+   >[!NOTE]
    > If the process errors or stalls, [Ctrl C] to end the process and simply run ```docker compose up -d```.
 
 
-   Once the containers have started successfully, make the kafka dashboard publicly visible and open it in a browser.
+   Once the containers have started successfully, make the kafka dashboard publicly visible and then open it in a browser.
    <img width="960" height="540" alt="Desktop - 3" src="https://github.com/user-attachments/assets/9d4e3f64-2677-4634-9fde-0f29993959b2" /><br>
 
 
-   The kafka dashboard is now running! Follow the lab scenarios below to start exploring.
+   Your kafka dashboard is now running! Follow the lab scenarios below to start exploring.
    When you're done, you can stop your codespace manually or it will automatically stop after 30 minutes of inactivity. 
 
 ---
@@ -85,10 +86,11 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
 ## Tips and Tricks
  - For any values that are not explicitly mentioned in the lab step, use the defaults preset.
  - At the bottom of the producer and consumer tabs, there are Configuration Guide to help explain some of the configurations.
+ - In any case, if the information doesn't seem right on the dashboard, feel free to refresh the page. (_Pet Gossip Central is not perfect!_)
    
 ---
 
-## Scenario 1: Getting Started
+## Scenario 1: Getting Pet Gossip Started
 > “Hey, Pixie. Did you see? There's a new cat next door” ~ Buddy
 
 <br>
@@ -132,6 +134,10 @@ Objective: Learn how offset configurations can impact initial message consumptio
 
 ### Check Your Work
  - In the "Consumed Messages" table, you should notice that Sammy missed previous messages that were sent.
+
+> [!NOTE] What if Sammy did see the previous messages?
+> If Sammy DID see the previous messages, he's already told all the other dogs in the neighborhood about it too. You won't be able to the scenario with Sammy because Sammy will reconnect always with his last committed offset (More on this later). 
+> But no worries, the birds and the hamsters are all also late to the news. You can create another consumer under a different consumer group like 'Hammy' under 'hamster-consumers'. Just make sure to set the auto offset reset as 'latest'. 
 
 ## Scenario 4: Scaling the Pet Gossip
 
@@ -183,6 +189,7 @@ Objective: Understand how Kafka uses replication to continue processing without 
 
 ### Check Your Work
  - In the "Partition Assignments" table, you should notice that the broker that failed is not the Leader Broker for any of the partitions.
+ - Additionally, each topic partition is assigned a different leader broker, balancing out the work load for handling new messages. 
 
 ## Scenario 6: Topic Design
 
