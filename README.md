@@ -160,7 +160,7 @@ Objective: Partitioning enables parallelism, allowing you to produce and consume
 - Recreate the consumer 'Pixie'
 
 ### Check Your Work
- - In the "Partition Assignments" table, you should notice that Pixie has been assigned to all 6 partitions. 
+ - In the "Partition Assignments" table, you should notice that Pixie has been assigned to all 6 partitions and each topic partition is assigned a different leader broker, balancing out the work load for handling new messages. 
 
 ## Scenario 5: Bad Server
 
@@ -189,11 +189,10 @@ Objective: Understand how Kafka uses replication to continue processing without 
 
 ### Check Your Work
  - In the "Partition Assignments" table, you should notice that the broker that failed is not the Leader Broker for any of the partitions.
- - Additionally, each topic partition is assigned a different leader broker, balancing out the work load for handling new messages. 
 
 ## Scenario 6: Topic Design
 
-> "I'm not that interested in the yard drama or any indoor crimes but tell me more about just the neighborhood park" ~ Pixie
+> "I'm not that interested in the yard drama but tell me more about just the neighborhood park or any indoor crimes" ~ Pixie
 
 <br>
 
@@ -280,7 +279,7 @@ Objective:
  - Restart Squirrel1 and observe how the partitions are reassigned again.
 
 ### Check Your Work
- - In the "Partition Assignments" table, you should notice that the squirrels split up the partitions were adjusted when the squirrel was turned off and once again when it was turned on.
+ - In the "Partition Assignments" table, you should notice that the partitions were adjusted when the squirrel was turned off and once again when it was turned on so that each partition is always assigned to at least one consumer in the group but a partition is never assigned to more than one consumer.
 
 ---
 
