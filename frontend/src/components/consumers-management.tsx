@@ -156,7 +156,6 @@ export function ConsumersManagement({topics, apiURL, consumers, setConsumers}) {
       const [consumerResponse] = await Promise.all([
         axios.post(`${apiURL}/consume`, consumerRequest)
       ]);
-
       setConsumedMessages(consumerResponse.data.messages)
       setTotalPages(Math.ceil(consumerResponse.data.totalCount/messagesPerPage))
       setTotalMessages(consumerResponse.data.totalCount)

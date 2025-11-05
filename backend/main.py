@@ -496,6 +496,7 @@ async def stop_broker(broker_id: int):
     try:
         loop = asyncio.get_running_loop()
         stopped = await loop.run_in_executor(None, stop_service, service_name)
+        await asyncio.sleep(2)
         if not stopped:
             raise HTTPException(status_code=500, detail=f"Failed to stop service {service_name}")
         return {"status": "stopped", "service_name": service_name, "broker": await get_brokers()}
@@ -514,6 +515,7 @@ async def restart_broker(broker_id: int):
     try:
         loop = asyncio.get_running_loop()
         restarted = await loop.run_in_executor(None, restart_service, service_name)
+        await asyncio.sleep(10)
         if not restarted:
             raise HTTPException(status_code=500, detail=f"Failed to restart service {service_name}")
         return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
@@ -532,7 +534,9 @@ async def delete_broker(broker_id: int):
     try:
         loop = asyncio.get_running_loop()
         stopped = await loop.run_in_executor(None, stop_service, service_name)
+        await asyncio.sleep(1)
         removed = await loop.run_in_executor(None, remove_service, service_name)
+        await asyncio.sleep(1)
         if not (stopped or removed):
             # if neither stopped nor removed, report failure
             raise HTTPException(status_code=500, detail=f"Failed to remove service {service_name}")

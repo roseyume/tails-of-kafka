@@ -2,17 +2,25 @@ import yaml
 import os
 from docker import DockerClient
 from docker.errors import NotFound
+import requests
+from requests_unixsocket import UnixAdapter
+import requests_unixsocket
+import logging
+import sys
+import docker.api
 
 DOCKER_SOCK = os.getenv("DOCKER_SOCK", "unix:///var/run/docker.sock")
 COMPOSE_FILE = os.getenv("DOCKER_COMPOSE_FILE", "./docker-compose.yml")
-
 
 def get_client():
     """Lazily create a DockerClient. Creating at import time can fail if the
     docker socket isn't mounted yet (and will crash the whole app during import).
     This helper creates a client when needed so imports remain safe.
     """
-    return DockerClient(base_url=DOCKER_SOCK)
+    try:
+        return DockerClient(base_url=DOCKER_SOCK)
+    except Exception as e:
+        logger.error(e)
 
 
 def _parse_ports(ports_list):
