@@ -518,7 +518,7 @@ async def restart_broker(broker_id: int):
         await asyncio.sleep(10)
         if not restarted:
             raise HTTPException(status_code=500, detail=f"Failed to restart service {service_name}")
-        return {"status": "running", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
+        return {"status": "restarted", "broker_id": broker_id, "service_name": service_name, "broker": await get_brokers()}
     except HTTPException:
         raise
     except Exception as e:

@@ -2,10 +2,8 @@
 
 cp backup/docker-compose.bkup docker-compose.yml
 
-
 echo "Starting Docker services..."
 docker compose up -d
-
 
 # echo "Starting backend and frontend containers via docker compose..."
 # docker compose up -d --build backend frontend || {
