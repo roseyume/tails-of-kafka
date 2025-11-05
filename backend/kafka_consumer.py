@@ -25,6 +25,7 @@ def consume_single_consumer(consumer_name: str, topics: list[str], consumer_obj:
                 if msg.error().code() != KafkaError._PARTITION_EOF:
                     print(f"Kafka error ({consumer_name}): {msg.error()}", flush=True)
             elif msg is not None:
+                print(f"Consumed ({msg})", flush=True)
                 row = {
                     "consumer_name": consumer_name,
                     "topic": msg.topic(),

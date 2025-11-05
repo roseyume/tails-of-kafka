@@ -2,17 +2,50 @@ import yaml
 import os
 from docker import DockerClient
 from docker.errors import NotFound
+import requests
+from requests_unixsocket import UnixAdapter
+import requests_unixsocket
+import logging
+import sys
+import docker.api
 
 DOCKER_SOCK = os.getenv("DOCKER_SOCK", "unix:///var/run/docker.sock")
 COMPOSE_FILE = os.getenv("DOCKER_COMPOSE_FILE", "./docker-compose.yml")
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,   # ensure logs go to stdout (Gitpod picks this up)
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _patched_make_session(base_url=None, timeout=60, **kwargs):
+    session = _original_make_session(base_url, timeout, **kwargs)
+    session.mount("http+docker://", UnixAdapter())
+    return session
 
 def get_client():
     """Lazily create a DockerClient. Creating at import time can fail if the
     docker socket isn't mounted yet (and will crash the whole app during import).
     This helper creates a client when needed so imports remain safe.
     """
-    return DockerClient(base_url=DOCKER_SOCK)
+    try:
+        # print("DOCKER_HOST =", os.getenv("DOCKER_HOST"))
+        # print("Default socket path exists:", os.path.exists("/var/run/docker.sock"))
+        # print("User in docker group:", "docker" in open("/etc/group").read())
+        # print(dir(requests_unixsocket))
+        # logger.info("DOCKER HOST: %s", os.environ.get("DOCKER_HOST"))
+        # s = requests.Session()
+        # logger.info("Registered adapters:", list(s.adapters.keys()))
+        # requests.Session().mount("http+docker://", UnixAdapter())
+        # logger.info("Registered adapters after requestSession:", list(s.adapters.keys()))
+        # s = requests.Session()
+        # logger.info("Registered adapters:", list(s.adapters.keys()))
+        return DockerClient(base_url=DOCKER_SOCK)
+    except Exception as e:
+        logger.error(e)
 
 
 def _parse_ports(ports_list):

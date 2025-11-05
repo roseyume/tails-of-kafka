@@ -18,6 +18,7 @@ class ProducerTracker:
 
     def send_message(self, topic, value):
         try:
+            print(f"Message: {value}")
             self.producer.produce(
                 topic,
                 value=value.encode("utf-8"),

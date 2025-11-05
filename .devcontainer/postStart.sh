@@ -2,6 +2,7 @@
 
 cp backup/docker-compose.bkup docker-compose.yml
 
+
 echo "Starting Docker services..."
 docker compose up -d
 
