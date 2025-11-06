@@ -74,11 +74,16 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    > If the process errors or stalls, [Ctrl C] to end the process and simply run ```docker compose up -d```.
 
 
-   Once the containers have started successfully, make the kafka dashboard publicly visible and then open it in a browser.
+   Once the containers have started successfully, make the kafka dashboard publicly visible.
    <img width="960" height="540" alt="Desktop - 3" src="https://github.com/user-attachments/assets/9d4e3f64-2677-4634-9fde-0f29993959b2" /><br>
 
+   Then, open the kafka dashboard in a new browser.
+   <img width="1440" height="811" alt="Desktop - 5" src="https://github.com/user-attachments/assets/e380c58d-3440-4c47-82f1-a9bbec108aae" />
 
-   Your kafka dashboard is now running! Follow the lab scenarios below to start exploring.
+   Your very own kafka dashboard is now running! 
+   <img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/7882566f-150f-4834-9c05-92116755df39" />
+   
+   Follow the lab scenarios below to start exploring.
    When you're done, you can stop your codespace manually or it will automatically stop after 30 minutes of inactivity. 
 
 ---
@@ -157,7 +162,7 @@ Objective: Partitioning enables parallelism, allowing you to produce and consume
 - Delete the consumers 'Sammy' and 'Pixie' and the producer 'Buddy' -- **Note: Only delete after producer is done 
 - Recreate the topic 'NeighborhoodUpdates' with 6 partitions instead of 1
 - Create 2 producers configured for the topic 'NeighborhoodUpdates' and use the 💬 button to send messages
-- Recreate the consumer 'Pixie'
+- Recreate the consumer 'Pixie'. She should still be configured for topic 'NeighborhoodUpdates, consumer group 'cat-consumers' and auto offset reset 'earliest'. 
 
 ### Check Your Work
  - In the "Partition Assignments" table, you should notice that Pixie has been assigned to all 6 partitions and each topic partition is assigned a different leader broker, balancing out the work load for handling new messages. 
@@ -260,14 +265,14 @@ Each consumer in the group is assigned a subset of partitions from the topic, an
 
 Objective:
 
-- Create 3 squirrel consumers to read the news across all the topics and group them into the same consumer group to evenly divide the work.
+- Create 3 squirrel consumers (Squirrel1, Squirrel2, Squirrel3) to read the news across all the topics and group them into the same consumer group (squirrel-consumers) to evenly divide the work.
 
 ### Check Your Work
  - In the "Partition Assignments" table, you should notice that the squirrels split up the partitions between themselves. 
 
 ## Scenario 9: Missing out on the latest gossip!
 
-> “Squirrel 3's listener crashed! That's so much gossip to go through again!”
+> “Squirrel3's listener crashed! That's so much gossip to go through again!”
 
 <br>
 
