@@ -140,8 +140,9 @@ Objective: Learn how offset configurations can impact initial message consumptio
 ### Check Your Work
  - In the "Consumed Messages" table, you should notice that Sammy missed previous messages that were sent.
 
-> [!NOTE] What if Sammy did see the previous messages?
-> If Sammy DID see the previous messages, he's already told all the other dogs in the neighborhood about it too. You won't be able to the scenario with Sammy because Sammy will reconnect always with his last committed offset (More on this later). 
+> [!NOTE]
+> If Sammy **did** see the previous messages, he's already told all the other dogs in the neighborhood about it too. You won't be able to redo the scenario with Sammy because Sammy will reconnect always with his last committed offset (More on this later).
+>  
 > But no worries, the birds and the hamsters are all also late to the news. You can create another consumer under a different consumer group like 'Hammy' under 'hamster-consumers'. Just make sure to set the auto offset reset as 'latest'. 
 
 ## Scenario 4: Scaling the Pet Gossip
@@ -308,6 +309,7 @@ Kafka is designed for asynchronous messaging, where producers send messages with
 
 <details>
 <summary>When to Use Kafka</summary>
+   
 Kafka is a great choice for:
 - processing large volumes of data in real-time.
 - decoupling producers and consumers for better scalability.
