@@ -59,9 +59,9 @@ In this workshop, think of Kafka like a neighborhood pet gossip system:
    <img width="960" height="540" alt="Desktop - 4" src="https://github.com/user-attachments/assets/31792812-370e-4bb0-988e-5b07319ce561" /><br><br>
    
    >[!NOTE]
-   > If your codespace does not start and you have other codespaces on this github account:
-   >    - Check your other codespaces and stop them if they are running. 
-   >    - Check your github codespace billing. The free tier provides 15 GB and 120 core hours per month.
+   > If you have other codespaces on this github account, you may need to:
+   >    - stop your other codespaces if they are running. 
+   >    - check your github codespace billing. The free tier provides 15 GB and 120 core hours per month.
 
 
 
