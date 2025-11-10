@@ -393,7 +393,7 @@ export function ProducersManagement({topics, apiURL, producers, setProducers}) {
                         <MessageCircle className="w-3 h-3" />
                       </Button>
 
-                      <Button
+                       {/* <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
@@ -404,6 +404,7 @@ export function ProducersManagement({topics, apiURL, producers, setProducers}) {
                       >
                         <Send className="w-3 h-3" />
                       </Button>
+                       */}
                       
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
