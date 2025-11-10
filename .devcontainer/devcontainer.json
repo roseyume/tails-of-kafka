@@ -1,0 +1,22 @@
+{
+    "name": "Tails of Kafka",
+    "postStartCommand": "bash .devcontainer/postStart.sh",
+  
+    "customizations": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    },
+  
+    "features": {
+      "ghcr.io/devcontainers/features/git:1": {}
+    },
+  
+    "portsAttributes": {
+      "8000": { "label": "FastAPI", "onAutoForward": "notify" },
+      "3000": { "label": "Frontend", "onAutoForward": "openPreview" }
+    },
+  
+      "forwardPorts": [8000, 3000, 5432, 2181, 2188, 9092, 9093, 9094, 9992, 9993, 9994, 8081]
+  }
+  

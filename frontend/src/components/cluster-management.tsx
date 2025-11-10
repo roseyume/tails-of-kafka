@@ -69,7 +69,11 @@ export function ClusterManagement({apiURL}) {
       toast.success(`Broker ${id} is already ${newStatus}`);
       return false;
     } else {
-      toast.success(`Broker ${id} is ${newStatus}`);
+      if (newStatus == 'removing') {
+        toast.success(`Broker ${id} is being removed`);
+      } else {
+        toast.success(`Broker ${id} is ${newStatus}`);
+      } 
     }
 
     setBrokers((prevBrokers) => {

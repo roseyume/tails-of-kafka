@@ -22,7 +22,10 @@ const navigation = [
   // { name: 'Schema Registry', icon: Settings, id: 'schema' },
 ];
 
-const apiURL = import.meta.env.VITE_API_BASE_URL;
+const codespaceName = import.meta.env.VITE_CODESPACE_NAME;
+// When running in Codespaces, use a relative path so the Vite dev server can proxy requests
+// to the backend (avoids GitHub tunnel auth redirects). Otherwise use configured API URL or localhost.
+const apiURL = codespaceName ? '' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
 
 
 export default function App() {
