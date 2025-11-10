@@ -295,9 +295,9 @@ You’ve turned chaos into cadence.
 Consumers know where they left off. Producers don’t over-share. Everyone knows what happened, who it happened to, and when it was published.
 As a result, the squirrels were able to find the dog digging up the acorns in the park.
 
-You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
 
-### 🏅🎖️ You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
+
+#### 🏅🎖️ You built Pet Gossip Central into a reliable stream of furry truth. Kafka would be proud.
 ---
 
 ## Additional Key Points for Kafka Beginners
